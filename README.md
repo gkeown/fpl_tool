@@ -1,6 +1,6 @@
 # FPL CLI
 
-A data-driven Fantasy Premier League CLI assistant. Aggregates free data sources, computes player form heuristics, predicts goals and clean sheets, and recommends transfers and captains.
+A data-driven Fantasy Premier League CLI assistant for personal use. Aggregates free data sources (FPL API, Understat, betting odds, projected points), analyses player form and fixture difficulty, predicts goals and clean sheets, and recommends transfers and captains.
 
 ## Architecture
 
@@ -16,20 +16,19 @@ A data-driven Fantasy Premier League CLI assistant. Aggregates free data sources
          │               │  │             │  │                │
          │ data_cmds     │  │ form        │  │ fpl_api        │
          │ team_cmds     │  │ fdr         │  │ understat      │
-         │ player_cmds   │  │ predictions │  │ fbref          │
-         │ captain_cmds  │  │ team        │  │ odds           │
+         │ player_cmds   │  │ predictions │  │ odds           │
+         │ captain_cmds  │  │ team        │  │ projections    │
          │ transfer_cmds │  │ captaincy   │  │ injuries       │
          │ predict_cmds  │  │ transfers   │  │ mapper         │
          │ price_cmds    │  │ differentials│ │                │
-         │ formatters    │  │ price       │  └───────┬────────┘
+         │ fixtures_cmds │  │ price       │  └───────┬────────┘
+         │ formatters    │  │             │           │
          └───────────────┘  └──────┬──────┘          │
                                    │                  │
                            ┌───────┴──────────────────┴───┐
                            │     db/ (SQLAlchemy 2.0)     │
-                           │                               │
-                           │  engine.py  models.py         │
-                           │  queries.py                   │
-                           └───────────────┬───────────────┘
+                           │  engine.py  models.py        │
+                           └───────────────┬──────────────┘
                                            │
                                     ┌──────┴──────┐
                                     │   SQLite    │
@@ -37,27 +36,28 @@ A data-driven Fantasy Premier League CLI assistant. Aggregates free data sources
                                     └─────────────┘
 
  Data Sources:
- ┌─────────────────┐  ┌──────────────┐  ┌───────────┐  ┌──────────────┐
- │ FPL API         │  │ Understat    │  │ FBref     │  │ The Odds API │
- │ (bootstrap,     │  │ (xG, xA,    │  │ (SCA, GCA,│  │ (1X2, O/U,   │
- │  fixtures,      │  │  npxG per    │  │  pressures│  │  BTTS odds)  │
- │  player history)│  │  match)      │  │  per 90)  │  │              │
- └─────────────────┘  └──────────────┘  └───────────┘  └──────────────┘
+ ┌─────────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐
+ │ FPL API         │ │ Understat    │ │ The Odds API │ │ FF Pundit        │
+ │ (players, xG,   │ │ (xG, xA,    │ │ (1X2, O/U    │ │ (projected pts   │
+ │  fixtures, ICT, │ │  npxG, xGC,  │ │  betting     │ │  per GW, start%, │
+ │  DEFCON, history)│ │  xGBuildup)  │ │  odds)       │ │  CS%)            │
+ └─────────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘
 ```
 
 ### Data Flow
 
-1. **Ingest layer** fetches raw data from external APIs/scraped sources
-2. **Player ID mapper** resolves identities across sources (FPL ID <-> Understat <-> FBref)
-3. **DB layer** stores everything in SQLite via upserts (idempotent)
-4. **Analysis layer** reads from DB, computes form scores, FDR, predictions, transfer recommendations
+1. **Ingest layer** fetches raw data from FPL API, Understat, The Odds API, and Fantasy Football Pundit
+2. **Player ID mapper** resolves identities across sources (FPL ID <-> Understat) using fuzzy name matching
+3. **DB layer** stores everything in SQLite via idempotent upserts
+4. **Analysis layer** computes form scores, custom FDR, goal predictions, transfer recommendations
 5. **CLI layer** presents results via Rich tables
 
 ## Setup
 
 ```bash
 # Clone and enter directory
-cd fantasy_football
+git clone git@github.com:YOUR_USERNAME/fantasy-football.git
+cd fantasy-football
 
 # Create virtual environment and install
 python3 -m venv .venv
@@ -70,119 +70,132 @@ fpl --help
 
 ### Configuration
 
-Settings are configured via environment variables with the `FPL_` prefix:
+Create a `.env` file in the project root (gitignored):
+
+```bash
+# Required: your FPL team ID (find at fantasy.premierleague.com -> Points page URL)
+FPL_ID=1234567
+
+# Optional: enables betting odds data (free, 500 credits/month)
+# Sign up at https://the-odds-api.com
+FPL_ODDS_API_KEY=your_key_here
+```
+
+All settings use the `FPL_` prefix and can be set via environment variables or `.env`:
 
 | Variable | Default | Description |
 |---|---|---|
+| `FPL_ID` | `0` | Your FPL team ID |
 | `FPL_DB_PATH` | `data/fpl.db` | SQLite database path |
 | `FPL_ODDS_API_KEY` | _(empty)_ | API key for the-odds-api.com |
-| `FPL_API_FOOTBALL_KEY` | _(empty)_ | API key for api-football.com |
-| `FPL_FORM_LOOKBACK_WEEKS` | `5` | Gameweeks to consider for form |
+| `FPL_FORM_LOOKBACK_WEEKS` | `5` | Gameweeks for form calculation |
 | `FPL_HTTP_TIMEOUT` | `30` | HTTP request timeout in seconds |
 | `FPL_HTTP_MAX_CONCURRENT` | `5` | Max concurrent API requests |
 
-Create a `.env` file (gitignored) for persistent configuration:
+## Quick Start
 
 ```bash
-FPL_ODDS_API_KEY=your_key_here
-FPL_API_FOOTBALL_KEY=your_key_here
+# 1. Load all data (~15 seconds)
+fpl data refresh
+
+# 2. Load your team
+fpl me login
+
+# 3. Explore
+fpl me team
+fpl me analyse
+fpl captain pick --detail
+fpl players form --position MID --top 10
+fpl predict goals
+fpl news
 ```
 
-## Usage
+## Commands
 
 ### Data Management
 
 ```bash
-# Refresh all data sources
-fpl data refresh
+fpl data refresh                          # Refresh all sources
+fpl data refresh --source fpl             # FPL API only
+fpl data refresh --source understat       # Understat xG data
+fpl data refresh --source odds            # Betting odds (needs API key)
+fpl data refresh --source projections     # Projected points
+fpl data refresh --source injuries        # Injury data
+fpl data status                           # Show ingest history
+```
 
-# Refresh specific source
-fpl data refresh --source fpl
-fpl data refresh --source understat
-fpl data refresh --source odds
+### Your Team
 
-# Check data freshness
-fpl data status
-
-# Show player ID mapping quality
-fpl data map-players --show-unmatched
+```bash
+fpl me login                              # Load team (uses FPL_ID from .env)
+fpl me login 1234567                      # Load team by ID
+fpl me team                               # Show squad with form + projected points
+fpl me team --detail                      # Expanded view with captain markers
+fpl me analyse                            # Full analysis: form, FDR, xPts, weak spots
+fpl me analyse --weeks 5                  # Look-ahead window for fixtures
 ```
 
 ### Player Analysis
 
 ```bash
-# Search for a player
-fpl players search "Saka"
-
-# Detailed player card
-fpl players info "Saka"
-
-# Form rankings (top 20 by default)
-fpl players form
-fpl players form --position MID --top 10
-fpl players form --max-cost 7.0
-
-# Find low-ownership differentials
-fpl players differentials --max-ownership 10
+fpl players form                          # Top 20 by FPL form (avg pts/game)
+fpl players form --position DEF --top 10  # Filter by position
+fpl players form --max-cost 6.0           # Budget filter
+fpl players search "Saka"                 # Fuzzy name search
+fpl players info "Saka"                   # Full player card: stats, xG, DEFCON,
+                                          #   projected pts, set-pieces, fixtures
+fpl players differentials                 # Low-ownership high-value players
+fpl players differentials --max-ownership 5 --position MID
+fpl players setpieces                     # Set-piece taker notes (penalties, corners, FKs)
+fpl players setpieces --team Arsenal
 ```
 
 ### Fixtures and Predictions
 
 ```bash
-# Upcoming fixtures
-fpl fixtures show
-fpl fixtures show --gameweek 32
-
-# Custom fixture difficulty ratings
-fpl fixtures difficulty --weeks 6
-
-# Goal predictions with betting odds context
-fpl predict goals --gameweek 32
-
-# Clean sheet probability rankings
-fpl predict cleansheets --top 10
-```
-
-### Team Management
-
-```bash
-# Store FPL credentials
-fpl me login
-
-# View your team with form scores
-fpl me team --detail
-
-# Analyse team — weak spots, improvement suggestions
-fpl me analyse --weeks 5
+fpl fixtures show                         # Upcoming fixture schedule
+fpl fixtures show --gameweek 33           # Specific gameweek
+fpl fixtures difficulty --weeks 6         # FDR heatmap grid across weeks
+fpl fixtures odds                         # Betting odds for next GW fixtures
+fpl predict goals                         # Predicted scorelines + CS% per fixture
+fpl predict goals --gameweek 33
+fpl predict cleansheets --top 10          # Clean sheet probability rankings
 ```
 
 ### Transfers and Captaincy
 
 ```bash
-# Captain recommendations
-fpl captain --top 5 --detail
-
-# Transfer suggestions
-fpl transfers suggest
+fpl captain pick                          # Captain recommendations with xPts
+fpl captain pick --top 5 --detail         # Full scoring breakdown
+fpl transfers suggest                     # Best transfer suggestions for your team
 fpl transfers suggest --free-transfers 2 --max-hits 4
-
-# Head-to-head player comparison
-fpl transfers compare "Saka" "Salah"
+fpl transfers compare "Saka" "Palmer"     # Head-to-head comparison
 ```
 
-### Price Predictions
+### Price Changes and News
 
 ```bash
-# Players likely to rise in price
-fpl prices risers --top 10
-
-# Players likely to fall
-fpl prices fallers --top 10
+fpl prices risers --top 10                # Most transferred in this GW
+fpl prices fallers --top 10               # Most transferred out this GW
+fpl news                                  # Latest FPL headlines (Fantasy Football Scout)
+fpl news --top 5
 ```
+
+## Data Sources
+
+| Source | Auth | What it provides |
+|---|---|---|
+| **FPL API** | None | Players, fixtures, gameweek stats, xG/xA, ICT, DEFCON, set-piece notes |
+| **Understat** | None | Team/player xG, xA, npxG, xGChain, xGBuildup |
+| **The Odds API** | Free API key | 1X2, Over/Under 2.5 betting odds per fixture |
+| **Fantasy Football Pundit** | None | Per-GW projected points, start%, CS%, blank/double flags |
+| **Fantasy Football Scout** | None (RSS) | Latest FPL news headlines |
+
+Note: FBref advanced stats (SCA, GCA, progressive carries) were removed in January 2026 when Opta terminated their data license. The FPL API's own DEFCON stats and Understat data provide equivalent analytical coverage.
 
 ## Database Schema
 
-17 tables organized into four groups:
+18 tables organized into five groups:
 
 **Core FPL data:** `teams`, `players`, `player_gameweek_stats`, `fixtures`, `gameweeks`
 
@@ -190,114 +203,77 @@ fpl prices fallers --top 10
 
 **User data:** `my_team_players`, `my_account`
 
-**Computed/cache:** `ownership_snapshots`, `player_form_scores`, `custom_fdr`, `team_predictions`
+**Computed/cache:** `ownership_snapshots`, `player_form_scores`, `custom_fdr`, `team_predictions`, `player_projections`
 
 **System:** `ingest_logs`
 
-Migrations managed by Alembic:
-
-```bash
-# Generate a migration after model changes
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-```
-
 ## Testing
 
-### Unit Tests (fast, no network)
+### Unit Tests (153 tests, no network)
 
 ```bash
-# Run unit tests only (no external API calls)
-pytest tests/ -v -m "not integration"
-
-# Run with coverage
-pytest tests/ -m "not integration" --cov=src --cov-report=term-missing
-
-# Run specific test module
-pytest tests/test_ingest/test_fpl_api.py -v
-
-# Run a specific test
-pytest tests/test_skeleton.py::test_all_tables_created -v
+pytest tests/ -v -m "not integration"              # Run unit tests
+pytest tests/ -m "not integration" --cov=src        # With coverage
 ```
 
-### Integration Tests (hit live APIs)
-
-Integration tests verify the end-to-end flow against live external APIs. They are marked with `@pytest.mark.integration` so you can run them separately.
+### Integration Tests (26 tests, hits live APIs)
 
 ```bash
-# Run integration tests only
-pytest tests/test_integration/ -v -m integration
-
-# Run all tests (unit + integration)
-pytest tests/ -v
+pytest tests/test_integration/ -v -m integration    # Live API tests
+pytest tests/ -v                                    # All tests
 ```
 
-Integration tests cover three areas:
-
-1. **API Response Shape** (11 tests) — verify that the live FPL API returns the fields our code expects (catches API changes between seasons)
-2. **Ingest Pipeline** (12 tests) — fetch live data, upsert into in-memory SQLite, verify record counts, FK integrity, data validity
-3. **End-to-End** (3 tests) — full pipeline: fetch bootstrap + fixtures + player histories, ingest, verify data consistency
+Integration tests verify:
+- **API Response Shape** (11 tests) -- live FPL API returns expected fields
+- **Ingest Pipeline** (12 tests) -- fetch, upsert, query cycle with real data
+- **End-to-End** (3 tests) -- full pipeline with data consistency checks
 
 ### Test Structure
 
 ```
 tests/
-├── conftest.py              # In-memory SQLite fixture (db_session)
-├── fixtures/                # JSON snapshots of API responses
-│   └── bootstrap_static.json
-├── test_skeleton.py         # Project structure and model tests
+├── conftest.py                  # In-memory SQLite fixture
+├── fixtures/                    # JSON API snapshots
+├── test_skeleton.py             # Project structure + model tests
 ├── test_ingest/
-│   └── test_fpl_api.py      # FPL API upsert logic tests (unit)
-├── test_integration/
-│   └── test_fpl_api_live.py # Live API integration tests (26 tests)
-└── test_analysis/           # Analysis module tests (form, FDR, etc.)
+│   ├── test_fpl_api.py          # FPL upsert logic (12 tests)
+│   ├── test_understat.py        # Understat upsert (5 tests)
+│   ├── test_odds.py             # Odds matching + upsert (9 tests)
+│   └── test_mapper.py           # Player ID mapping (18 tests)
+├── test_analysis/
+│   ├── test_form.py             # Form engine (16 tests)
+│   ├── test_fdr.py              # Fixture difficulty (9 tests)
+│   ├── test_predictions.py      # Goal predictions (19 tests)
+│   ├── test_team.py             # Team analysis (12 tests)
+│   ├── test_captaincy.py        # Captain picker (16 tests)
+│   ├── test_transfers.py        # Transfer recommender (11 tests)
+│   ├── test_differentials.py    # Differentials (8 tests)
+│   └── test_price.py            # Price predictor (9 tests)
+└── test_integration/
+    └── test_fpl_api_live.py     # Live API integration (26 tests)
 ```
-
-Unit tests use an in-memory SQLite database with no external dependencies. Integration tests hit live APIs but still use in-memory SQLite so they leave no artifacts.
 
 ### Code Quality
 
 ```bash
-# Format
-black src/ tests/
-
-# Lint
-ruff check src/ tests/
-ruff check --fix src/ tests/   # auto-fix
-
-# Type check (strict mode)
-mypy src/
-
-# All checks at once
-black --check src/ tests/ && ruff check src/ tests/ && mypy src/ && pytest tests/ -v
+black src/ tests/                           # Format
+ruff check src/ tests/                      # Lint
+mypy src/                                   # Type check (strict)
+black --check src/ tests/ && ruff check src/ tests/ && mypy src/ && pytest tests/ -m "not integration"
 ```
 
 ## Tech Stack
 
 | Component | Technology |
 |---|---|
-| Language | Python 3.12+ |
-| CLI framework | Typer + Rich |
-| Database | SQLite via SQLAlchemy 2.0 |
-| HTTP client | httpx (async) |
-| Web scraping | BeautifulSoup4 + lxml |
+| Language | Python 3.12+ with strict type hints |
+| CLI | Typer + Rich |
+| Database | SQLite via SQLAlchemy 2.0 (`Mapped[T]`) |
+| HTTP | httpx (async) |
 | Name matching | rapidfuzz |
 | Migrations | Alembic |
-| Credentials | keyring |
+| News feed | feedparser (RSS) |
 | Formatting | black |
 | Linting | ruff |
-| Type checking | mypy (strict) |
+| Type checking | mypy (strict mode) |
 | Testing | pytest + pytest-asyncio + pytest-httpx |
-
-## Project Status
-
-- [x] Milestone 0: Project skeleton, DB models, CLI framework
-- [x] Milestone 1: FPL API ingest (bootstrap, fixtures, player histories)
-- [ ] Milestone 2: Understat + FBref + betting odds + injuries + player ID mapping
-- [ ] Milestone 3: Form engine + fixture difficulty + goal/clean sheet predictions
-- [ ] Milestone 4: Team analyser + captaincy picker
-- [ ] Milestone 5: Transfer recommender
-- [ ] Milestone 6: Differentials + price predictor
-- [ ] Milestone 7: Polish (output formats, smart refresh, error handling)
