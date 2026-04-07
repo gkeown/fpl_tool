@@ -7,7 +7,13 @@ from rich.table import Table
 from fpl.analysis.captaincy import CaptainCandidate, pick_captains
 from fpl.analysis.form import get_current_gameweek
 from fpl.cli.app import captain_app
-from fpl.cli.formatters import fdr_color, form_color, format_cost, position_str
+from fpl.cli.formatters import (
+    check_data_staleness,
+    fdr_color,
+    form_color,
+    format_cost,
+    position_str,
+)
 from fpl.db.engine import get_session, init_db
 from fpl.db.models import CustomFdr, MyTeamPlayer, Player, PlayerProjection, Team
 
@@ -52,6 +58,10 @@ def pick(
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         current_gw = get_current_gameweek(session)
 
         # Determine if the user has a team loaded

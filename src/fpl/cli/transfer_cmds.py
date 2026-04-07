@@ -11,7 +11,13 @@ from fpl.analysis.transfers import (
     suggest_transfers,
 )
 from fpl.cli.app import transfers_app
-from fpl.cli.formatters import fdr_color, form_color, format_cost, position_str
+from fpl.cli.formatters import (
+    check_data_staleness,
+    fdr_color,
+    form_color,
+    format_cost,
+    position_str,
+)
 from fpl.db.engine import get_session, init_db
 from fpl.db.models import MyAccount
 
@@ -34,6 +40,10 @@ def suggest(
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         account: MyAccount | None = session.get(MyAccount, 1)
         bank_tenths = account.bank if account is not None else 0
         bank_display = bank_tenths / 10.0

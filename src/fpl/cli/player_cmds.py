@@ -10,10 +10,12 @@ from rich.table import Table
 from fpl.analysis.differentials import Differential, find_differentials
 from fpl.cli.app import players_app
 from fpl.cli.formatters import (
+    check_data_staleness,
     fdr_color,
     form_color,
     format_cost,
     fpl_form_color,
+    output_json,
     position_str,
 )
 from fpl.db.engine import get_session, init_db
@@ -36,6 +38,9 @@ def form(
     max_cost: float | None = typer.Option(None, help="Maximum cost (e.g., 8.0)"),
     min_minutes: int = typer.Option(90, help="Minimum total minutes played"),
     top: int = typer.Option(20, help="Number of players to show"),
+    output_format: str = typer.Option(
+        "table", "--format", help="Output format: table or json"
+    ),
 ) -> None:
     """Show players ranked by FPL form (avg points/game, last 30 days)."""
     init_db()
@@ -43,6 +48,10 @@ def form(
     _POSITION_TYPE: dict[str, int] = {"GKP": 1, "DEF": 2, "MID": 3, "FWD": 4}
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         query = (
             session.query(Player, Team)
             .join(Team, Team.fpl_id == Player.team_id)
@@ -75,6 +84,46 @@ def form(
         rows.sort(key=lambda r: float(r[0].form), reverse=True)
         rows = rows[:top]
 
+        def _per90(field: str, stats: list[PlayerGameweekStats], mins: int) -> float:
+            if mins == 0:
+                return 0.0
+            total = sum(float(getattr(s, field, 0) or 0) for s in stats)
+            return total / mins * 90.0
+
+        if output_format == "json":
+            records = []
+            for rank, (player, team) in enumerate(rows, 1):
+                fpl_form = float(player.form)
+                recent_stats: list[PlayerGameweekStats] = (
+                    session.query(PlayerGameweekStats)
+                    .filter(PlayerGameweekStats.player_id == player.fpl_id)
+                    .order_by(PlayerGameweekStats.gameweek.desc())
+                    .limit(5)
+                    .all()
+                )
+                total_mins = sum(s.minutes for s in recent_stats)
+                records.append(
+                    {
+                        "rank": rank,
+                        "player": player.web_name,
+                        "team": team.short_name,
+                        "position": position_str(player.element_type),
+                        "cost": float(player.now_cost) / 10,
+                        "form": fpl_form,
+                        "xg_per90": round(
+                            _per90("expected_goals", recent_stats, total_mins), 3
+                        ),
+                        "xa_per90": round(
+                            _per90("expected_assists", recent_stats, total_mins), 3
+                        ),
+                        "pts_per90": round(
+                            _per90("total_points", recent_stats, total_mins), 2
+                        ),
+                    }
+                )
+            output_json(records)
+            return
+
         table = Table(
             title="Player Form Rankings (FPL)",
             show_header=True,
@@ -95,7 +144,7 @@ def form(
             color = fpl_form_color(fpl_form)
 
             # Compute per-90 from recent GW stats for display
-            recent_stats: list[PlayerGameweekStats] = (
+            recent_stats = (
                 session.query(PlayerGameweekStats)
                 .filter(PlayerGameweekStats.player_id == player.fpl_id)
                 .order_by(PlayerGameweekStats.gameweek.desc())
@@ -104,15 +153,6 @@ def form(
             )
 
             total_mins = sum(s.minutes for s in recent_stats)
-
-            def _per90(
-                field: str, stats: list[PlayerGameweekStats], mins: int
-            ) -> float:
-                if mins == 0:
-                    return 0.0
-                total = sum(float(getattr(s, field, 0) or 0) for s in stats)
-                return total / mins * 90.0
-
             xg_per90 = _per90("expected_goals", recent_stats, total_mins)
             xa_per90 = _per90("expected_assists", recent_stats, total_mins)
             pts_per90 = _per90("total_points", recent_stats, total_mins)
@@ -284,9 +324,7 @@ def info(name: str = typer.Argument(..., help="Player name or ID")) -> None:
         if player.element_type in (2, 3):
             mins = max(player.minutes, 1)
             dc_per90 = player.defensive_contribution / mins * 90
-            cbi_per90 = (
-                player.clearances_blocks_interceptions / mins * 90
-            )
+            cbi_per90 = player.clearances_blocks_interceptions / mins * 90
             rec_per90 = player.recoveries / mins * 90
             tck_per90 = player.tackles / mins * 90
 
@@ -374,9 +412,7 @@ def info(name: str = typer.Argument(..., help="Player name or ID")) -> None:
         )
 
         # Projected points
-        proj: PlayerProjection | None = session.get(
-            PlayerProjection, player.fpl_id
-        )
+        proj: PlayerProjection | None = session.get(PlayerProjection, player.fpl_id)
         if proj is not None:
             proj_table = Table(
                 title="Projected Points",

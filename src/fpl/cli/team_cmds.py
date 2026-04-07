@@ -11,6 +11,7 @@ from fpl.analysis.form import get_current_gameweek
 from fpl.analysis.team import TeamAnalysis, analyse_team
 from fpl.cli.app import me_app
 from fpl.cli.formatters import (
+    check_data_staleness,
     fdr_color,
     form_color,
     format_cost,
@@ -111,6 +112,10 @@ def team(
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         current_gw = get_current_gameweek(session)
 
         # Load my team players, joined to players + teams
@@ -244,6 +249,10 @@ def analyse(
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         analysis: TeamAnalysis | None = analyse_team(session, weeks_ahead=weeks)
 
         if analysis is None:

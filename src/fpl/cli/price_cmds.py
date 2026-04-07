@@ -1,15 +1,45 @@
 from __future__ import annotations
 
+from typing import Any
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from fpl.analysis.price import PriceMovement, predict_price_changes
 from fpl.cli.app import prices_app
-from fpl.cli.formatters import format_cost, position_str
+from fpl.cli.formatters import (
+    check_data_staleness,
+    format_cost,
+    output_json,
+    position_str,
+)
 from fpl.db.engine import get_session, init_db
 
 console = Console()
+
+
+def _movements_to_records(
+    movements: list[PriceMovement],
+) -> list[dict[str, Any]]:
+    """Convert PriceMovement list to a list of plain dicts for JSON output."""
+    records = []
+    for rank, m in enumerate(movements, 1):
+        records.append(
+            {
+                "rank": rank,
+                "player": m.player.web_name,
+                "team": m.team.short_name,
+                "position": position_str(m.player.element_type),
+                "price": float(m.current_price) / 10,
+                "ownership_pct": m.ownership,
+                "transfers_in_event": m.transfers_in_event,
+                "transfers_out_event": m.transfers_out_event,
+                "net_transfers_event": m.net_transfers_event,
+                "pressure": round(m.pressure, 4),
+            }
+        )
+    return records
 
 
 def _render_price_table(
@@ -69,34 +99,58 @@ def _render_price_table(
 @prices_app.command()
 def risers(
     top: int = typer.Option(20, help="Number of risers to show"),
+    output_format: str = typer.Option(
+        "table", "--format", help="Output format: table or json"
+    ),
 ) -> None:
     """Show players most likely to rise in price."""
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         movements: list[PriceMovement] = predict_price_changes(
             session, direction="rise", top=top
         )
-        _render_price_table(
-            movements,
-            title="Predicted Price Risers",
-            direction="rise",
-        )
+
+    if output_format == "json":
+        output_json(_movements_to_records(movements))
+        return
+
+    _render_price_table(
+        movements,
+        title="Predicted Price Risers",
+        direction="rise",
+    )
 
 
 @prices_app.command()
 def fallers(
     top: int = typer.Option(20, help="Number of fallers to show"),
+    output_format: str = typer.Option(
+        "table", "--format", help="Output format: table or json"
+    ),
 ) -> None:
     """Show players most likely to fall in price."""
     init_db()
 
     with get_session() as session:
+        warning = check_data_staleness(session)
+        if warning:
+            console.print(warning)
+
         movements: list[PriceMovement] = predict_price_changes(
             session, direction="fall", top=top
         )
-        _render_price_table(
-            movements,
-            title="Predicted Price Fallers",
-            direction="fall",
-        )
+
+    if output_format == "json":
+        output_json(_movements_to_records(movements))
+        return
+
+    _render_price_table(
+        movements,
+        title="Predicted Price Fallers",
+        direction="fall",
+    )

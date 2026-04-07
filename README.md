@@ -56,8 +56,8 @@ A data-driven Fantasy Premier League CLI assistant for personal use. Aggregates 
 
 ```bash
 # Clone and enter directory
-git clone git@github.com:YOUR_USERNAME/fantasy-football.git
-cd fantasy-football
+git clone git@github.com:gkeown/fpl_tool.git
+cd fpl_tool
 
 # Create virtual environment and install
 python3 -m venv .venv

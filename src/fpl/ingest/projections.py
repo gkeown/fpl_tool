@@ -51,9 +51,7 @@ def _build_player_index(
     session: Session,
 ) -> dict[int, tuple[str, str]]:
     """Return {fpl_id: (full_name_lower, team_short_name_lower)} for all players."""
-    rows = (
-        session.query(Player, Team).join(Team, Team.fpl_id == Player.team_id).all()
-    )
+    rows = session.query(Player, Team).join(Team, Team.fpl_id == Player.team_id).all()
     return {
         p.fpl_id: (
             f"{p.first_name} {p.second_name}".lower(),
@@ -227,9 +225,7 @@ async def run_projections_ingest(session: Session) -> None:
         )
 
         # Check if projections are empty (between GW updates)
-        non_zero = sum(
-            1 for r in records if r.get("gw1_pts", 0) > 0
-        )
+        non_zero = sum(1 for r in records if r.get("gw1_pts", 0) > 0)
         if non_zero == 0 and records:
             logger.warning(
                 "All projections are zero — Pundit CSV likely "
@@ -239,9 +235,7 @@ async def run_projections_ingest(session: Session) -> None:
             log.status = "success"
             log.finished_at = _now_utc()
             log.records_upserted = 0
-            log.error_message = (
-                "Skipped: projections all zero (between GW updates)"
-            )
+            log.error_message = "Skipped: projections all zero (between GW updates)"
             return
 
         count = upsert_projections(session, records)
