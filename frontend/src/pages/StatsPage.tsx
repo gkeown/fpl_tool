@@ -10,8 +10,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, X, ArrowLeft, Star } from "lucide-react";
 
-const CURRENT_SEASON = 2025;
-const SEASONS = [2025, 2024, 2023, 2022, 2021];
+const LEAGUE_NAMES: Record<string, string> = {
+  "eng.1": "Premier League",
+  "eng.2": "Championship",
+  "ita.1": "Serie A",
+  "esp.1": "La Liga",
+  "ger.1": "Bundesliga",
+  "fra.1": "Ligue 1",
+};
 
 function PlayerSearchResults({ results, onSelect }: { results: any[]; onSelect: (p: any) => void }) {
   if (results.length === 0) {
@@ -36,7 +42,7 @@ function PlayerSearchResults({ results, onSelect }: { results: any[]; onSelect: 
             )}
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm truncate">{p.name}</p>
-              <p className="text-xs text-muted-foreground">{p.team} · {p.league}</p>
+              <p className="text-xs text-muted-foreground">{p.team} · {LEAGUE_NAMES[p.league] || p.league}</p>
               <div className="flex gap-1.5 mt-1">
                 <Badge variant="outline" className="text-[10px]">{p.position || "N/A"}</Badge>
                 <Badge variant="outline" className="text-[10px]">{p.nationality}</Badge>
@@ -203,17 +209,15 @@ function XgSection({ xgData }: { xgData: any[] }) {
   );
 }
 
-function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => void }) {
-  const [season, setSeason] = useState(CURRENT_SEASON);
-
+function PlayerDetail({ playerId, league, onBack }: { playerId: string; league: string; onBack: () => void }) {
   const detail = useQuery({
-    queryKey: ["playerStats", playerId, season],
-    queryFn: () => api.getPlayerStats(playerId, season),
+    queryKey: ["playerStats", playerId, league],
+    queryFn: () => api.getPlayerStats(playerId, undefined, league),
   });
 
   const xg = useQuery({
-    queryKey: ["playerXg", playerId],
-    queryFn: () => api.getPlayerXg(playerId),
+    queryKey: ["playerXg", playerId, league],
+    queryFn: () => api.getPlayerXg(playerId, league),
   });
 
   const data = detail.data as any;
@@ -259,22 +263,6 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
             </div>
           </div>
 
-          {/* Season selector */}
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">Season:</span>
-            {SEASONS.map((s) => (
-              <Button
-                key={s}
-                variant={season === s ? "default" : "outline"}
-                size="sm"
-                onClick={() => setSeason(s)}
-                className={season === s ? "bg-fpl-green text-black hover:bg-fpl-green/80" : ""}
-              >
-                {s}/{(s + 1).toString().slice(2)}
-              </Button>
-            ))}
-          </div>
-
           {/* Per-competition stats */}
           {statistics.length > 0 ? (
             statistics.map((s: any, i: number) => (
@@ -282,7 +270,7 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
             ))
           ) : (
             <p className="text-center text-muted-foreground py-8">
-              No stats available for {season}/{season + 1}
+              No stats available for this player
             </p>
           )}
 
@@ -297,7 +285,7 @@ function PlayerDetail({ playerId, onBack }: { playerId: number; onBack: () => vo
 export default function StatsPage() {
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<{ id: string; league: string } | null>(null);
 
   const searchResults = useQuery({
     queryKey: ["playerStatsSearch", searchQuery],
@@ -308,17 +296,18 @@ export default function StatsPage() {
   const handleSearch = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && search.trim().length >= 2) {
       setSearchQuery(search.trim());
-      setSelectedPlayerId(null);
+      setSelectedPlayer(null);
     }
   };
 
-  if (selectedPlayerId) {
+  if (selectedPlayer) {
     return (
       <div>
         <PageHeader title="Player Stats" />
         <PlayerDetail
-          playerId={selectedPlayerId}
-          onBack={() => setSelectedPlayerId(null)}
+          playerId={selectedPlayer.id}
+          league={selectedPlayer.league}
+          onBack={() => setSelectedPlayer(null)}
         />
       </div>
     );
@@ -357,16 +346,14 @@ export default function StatsPage() {
 
       {searchResults.isError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>
-            Search failed. Check that FPL_API_FOOTBALL_KEY is set in .env.
-          </AlertDescription>
+          <AlertDescription>Search failed.</AlertDescription>
         </Alert>
       )}
 
       {searchResults.data && (
         <PlayerSearchResults
           results={searchResults.data as any[]}
-          onSelect={(p) => setSelectedPlayerId(p.id)}
+          onSelect={(p) => setSelectedPlayer({ id: p.id, league: p.league })}
         />
       )}
 

@@ -13,13 +13,13 @@ const NAV_ITEMS = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/team", icon: Users, label: "My Team" },
   { to: "/leagues", icon: Users2, label: "Leagues" },
-  { to: "/scores", icon: Radio, label: "Scores" },
-  { to: "/tables", icon: TableProperties, label: "Tables" },
-  { to: "/stats", icon: BarChart3, label: "Stats" },
   { to: "/players", icon: UserSearch, label: "Players" },
   { to: "/fixtures", icon: Calendar, label: "Fixtures" },
   { to: "/transfers", icon: ArrowLeftRight, label: "Transfers" },
   { to: "/prices", icon: TrendingUp, label: "Prices" },
+  { to: "/scores", icon: Radio, label: "Scores" },
+  { to: "/tables", icon: TableProperties, label: "Tables" },
+  { to: "/stats", icon: BarChart3, label: "Stats" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

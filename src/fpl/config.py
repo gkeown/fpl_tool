@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     http_max_concurrent: int = 5
     auto_refresh: bool = True
     league_ids: str = ""  # Comma-separated league IDs to auto-subscribe
-    api_football_season: int = 2025
+    api_football_season: int = 2024
 
 
 def get_settings() -> Settings:

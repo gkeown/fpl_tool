@@ -405,11 +405,17 @@ export const api = {
 
   // Player Stats
   searchPlayerStats: (q: string) => get<unknown[]>(`/stats/search?q=${encodeURIComponent(q)}`),
-  getPlayerStats: (id: number, season?: number) => {
-    const q = season ? `?season=${season}` : '';
+  getPlayerStats: (id: string, season?: number, league?: string) => {
+    const params = new URLSearchParams();
+    if (season) params.set('season', String(season));
+    if (league) params.set('league', league);
+    const q = params.toString() ? `?${params}` : '';
     return get<unknown>(`/stats/player/${id}${q}`);
   },
-  getPlayerXg: (id: number) => get<unknown>(`/stats/player/${id}/xg`),
+  getPlayerXg: (id: string, league?: string) => {
+    const q = league ? `?league=${league}` : '';
+    return get<unknown>(`/stats/player/${id}/xg${q}`);
+  },
 
   // Data management
   getDataStatus: () => get<DataSource[]>('/data/status'),
