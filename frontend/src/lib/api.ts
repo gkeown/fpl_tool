@@ -288,6 +288,41 @@ export interface OpponentTeam {
   transfers: OpponentTransfer[];
 }
 
+export interface MatchEvent {
+  minute: number;
+  extra_minute: number | null;
+  type: string;
+  detail: string;
+  player: string;
+  assist: string | null;
+  team: string;
+}
+
+export interface MatchScore {
+  fixture_id: number;
+  status: string;
+  status_long: string;
+  elapsed: number | null;
+  home_team: string;
+  away_team: string;
+  home_goals: number | null;
+  away_goals: number | null;
+  kickoff: string;
+  events: MatchEvent[];
+}
+
+export interface LeagueScores {
+  id: number;
+  name: string;
+  country: string;
+  matches: MatchScore[];
+}
+
+export interface ScoresResponse {
+  date: string;
+  leagues: LeagueScores[];
+}
+
 export const api = {
   // Team
   getTeam: () => get<TeamSummary>('/me/team'),
@@ -360,6 +395,12 @@ export const api = {
     get<LeagueStandings>(`/leagues/${leagueId}/standings?force=${force}`),
   getLeagueEntry: (leagueId: number, entryId: number) =>
     get<OpponentTeam>(`/leagues/${leagueId}/entry/${entryId}`),
+
+  // Scores
+  getTodayScores: (date?: string) => {
+    const q = date ? `?date=${date}` : '';
+    return get<ScoresResponse>(`/scores/today${q}`);
+  },
 
   // Data management
   getDataStatus: () => get<DataSource[]>('/data/status'),
