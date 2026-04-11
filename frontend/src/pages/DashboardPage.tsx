@@ -1,113 +1,148 @@
-import { useQuery } from '@tanstack/react-query';
-import { Box, Card, CardContent, Typography, Chip, Skeleton, Alert, Grid } from '@mui/material';
-import { api } from '@/lib/api';
-
-function StatCard({ title, children, loading }: { title: string; children: React.ReactNode; loading?: boolean }) {
-  return (
-    <Card sx={{ height: '100%' }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom sx={{ color: 'text.secondary', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1 }}>
-          {title}
-        </Typography>
-        {loading ? <Skeleton variant="rectangular" height={100} /> : children}
-      </CardContent>
-    </Card>
-  );
-}
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import StatCard from "@/components/StatCard";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import PageHeader from "@/components/PageHeader";
+import { Crown, Newspaper, RotateCw, Loader2, CheckCircle } from "lucide-react";
 
 export default function DashboardPage() {
-  const team = useQuery({ queryKey: ['team'], queryFn: () => api.getTeam() });
-  const captains = useQuery({ queryKey: ['captains'], queryFn: () => api.getCaptains() });
-  const predictions = useQuery({ queryKey: ['predictions'], queryFn: () => api.getPredictions() });
-  const news = useQuery({ queryKey: ['news'], queryFn: () => api.getNews() });
+  const qc = useQueryClient();
+  const team = useQuery({ queryKey: ["team"], queryFn: () => api.getTeam() });
+  const captains = useQuery({ queryKey: ["captains"], queryFn: () => api.getCaptains() });
+  const predictions = useQuery({ queryKey: ["predictions"], queryFn: () => api.getPredictions() });
+  const news = useQuery({ queryKey: ["news"], queryFn: () => api.getNews() });
 
-  // Compute projected totals from team players
-  const starters = (team.data as any)?.players?.filter((p: any) => p.is_starter) || [];
+  const refresh = useMutation({
+    mutationFn: () => api.refreshAll("all", true),
+    onSuccess: () => {
+      qc.invalidateQueries();
+    },
+  });
+
+  const teamData = team.data as any;
+  const starters = teamData?.players?.filter((p: any) => p.is_starter) || [];
   const projected1 = starters.reduce((s: number, p: any) => s + (p.xpts_next_gw || 0), 0);
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>Dashboard</Typography>
-      <Grid container spacing={3}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <StatCard title="My Team Summary" loading={team.isLoading}>
-            {team.data && (
-              <Box>
-                <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
-                  <Box>
-                    <Typography variant="h3" sx={{ color: 'primary.main' }}>{projected1.toFixed(1)}</Typography>
-                    <Typography variant="caption" color="text.secondary">Next GW xPts</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="h4" color="text.secondary">{(team.data as any).overall_points}</Typography>
-                    <Typography variant="caption" color="text.secondary">Total Points</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="h4" color="text.secondary">{(team.data as any).overall_rank?.toLocaleString()}</Typography>
-                    <Typography variant="caption" color="text.secondary">Overall Rank</Typography>
-                  </Box>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Chip label={`Bank: £${((team.data as any).bank || 0).toFixed(1)}m`} variant="outlined" size="small" />
-                  <Chip label={`FT: ${(team.data as any).free_transfers}`} variant="outlined" size="small" />
-                  <Chip label={`GW${(team.data as any).gameweek}`} color="primary" size="small" />
-                </Box>
-              </Box>
+    <div>
+      <PageHeader
+        title="Dashboard"
+        actions={
+          <div className="flex items-center gap-2">
+            {refresh.isSuccess && (
+              <span className="flex items-center gap-1 text-xs text-fpl-green">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Updated
+              </span>
             )}
-            {team.isError && <Alert severity="error">Failed to load team data. Run 'fpl me login' first.</Alert>}
-          </StatCard>
-        </Grid>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refresh.mutate()}
+              disabled={refresh.isPending}
+            >
+              {refresh.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <RotateCw className="h-4 w-4 mr-1" />
+              )}
+              {refresh.isPending ? "Refreshing..." : "Refresh Data"}
+            </Button>
+          </div>
+        }
+      />
 
-        <Grid size={{ xs: 12, md: 6 }}>
-          <StatCard title="Captain Picks" loading={captains.isLoading}>
-            {(captains.data as any[])?.slice(0, 3).map((c: any, i: number) => (
-              <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <Box>
-                  <Typography fontWeight={700}>{i === 0 ? '👑 ' : ''}{c.player}</Typography>
-                  <Typography variant="caption" color="text.secondary">{c.team} · {c.fixture}</Typography>
-                </Box>
-                <Chip label={(c.captain_score || 0).toFixed(1)} color={i === 0 ? 'primary' : 'default'} size="small" />
-              </Box>
-            ))}
-            {captains.isError && <Alert severity="warning">No captain data</Alert>}
-          </StatCard>
-        </Grid>
+      {refresh.isError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>Data refresh failed. Check the server logs.</AlertDescription>
+        </Alert>
+      )}
 
-        <Grid size={{ xs: 12, md: 6 }}>
-          <StatCard title="Next GW Predictions" loading={predictions.isLoading}>
-            {(predictions.data as any[])?.map((f: any, i: number) => (
-              <Box key={i} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <Typography variant="body2">{f.home_team} vs {f.away_team}</Typography>
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                  <Chip label={`${(f.home_predicted_goals || 0).toFixed(1)} - ${(f.away_predicted_goals || 0).toFixed(1)}`} size="small" variant="outlined" />
-                  <Typography variant="caption" color="text.secondary">CS: {f.home_cs_pct?.toFixed(0)}%/{f.away_cs_pct?.toFixed(0)}%</Typography>
-                </Box>
-              </Box>
-            ))}
-          </StatCard>
-        </Grid>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Team Summary */}
+        <StatCard title="Team Summary" loading={team.isLoading}>
+          {teamData ? (
+            <div>
+              <div className="flex items-baseline gap-6 mb-3">
+                <div>
+                  <span className="text-4xl font-display font-bold text-fpl-green">{teamData.gameweek_points ?? 0}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">GW{teamData.gameweek} Points</p>
+                </div>
+                <div>
+                  <span className="text-2xl font-display font-semibold text-muted-foreground">{teamData.overall_points}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">Total Points</p>
+                </div>
+                <div>
+                  <span className="text-2xl font-display font-semibold text-muted-foreground">{teamData.overall_rank?.toLocaleString()}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">Overall Rank</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="outline" className="text-xs">Bank: {'\u00A3'}{(teamData.bank || 0).toFixed(1)}m</Badge>
+                <Badge variant="outline" className="text-xs">FT: {teamData.free_transfers}</Badge>
+                <Badge className="text-xs bg-fpl-green/15 text-fpl-green border border-fpl-green/30">GW{teamData.gameweek}</Badge>
+              </div>
+            </div>
+          ) : team.isError ? (
+            <Alert variant="destructive"><AlertDescription>Failed to load team data. Run 'fpl me login' first.</AlertDescription></Alert>
+          ) : null}
+        </StatCard>
 
-        <Grid size={{ xs: 12, md: 6 }}>
-          <StatCard title="FPL News" loading={news.isLoading}>
-            {(news.data as any[])?.slice(0, 5).map((n: any, i: number) => (
-              <Box key={i} sx={{ py: 0.75, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  component="a"
-                  href={n.link}
-                  target="_blank"
-                  rel="noopener"
-                  sx={{ color: 'text.primary', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
-                >
-                  {n.title}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" display="block">{n.published}</Typography>
-              </Box>
-            ))}
-          </StatCard>
-        </Grid>
-      </Grid>
-    </Box>
+        {/* Captain Picks */}
+        <StatCard title="Captain Picks" icon={<Crown className="h-3.5 w-3.5" />} loading={captains.isLoading}>
+          {(captains.data as any[])?.slice(0, 3).map((c: any, i: number) => (
+            <div
+              key={i}
+              className={`flex items-center justify-between py-2.5 ${i < 2 ? "border-b border-border/40" : ""} ${i === 0 ? "pl-2 border-l-2 border-l-fpl-green" : ""}`}
+            >
+              <div className={i === 0 ? "ml-2" : ""}>
+                <p className="font-semibold text-sm">{c.player}</p>
+                <p className="text-xs text-muted-foreground">{c.team} &middot; {c.fixture}</p>
+              </div>
+              <Badge className={i === 0 ? "bg-fpl-green/15 text-fpl-green border border-fpl-green/30" : "bg-muted text-muted-foreground"}>
+                {(c.captain_score || 0).toFixed(1)}
+              </Badge>
+            </div>
+          ))}
+          {captains.isError && <p className="text-sm text-muted-foreground">No captain data available</p>}
+        </StatCard>
+
+        {/* Predictions */}
+        <StatCard title="Match Predictions" loading={predictions.isLoading}>
+          {(predictions.data as any[])?.slice(0, 6).map((f: any, i: number) => (
+            <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-0">
+              <span className="text-sm">{f.home_team} vs {f.away_team}</span>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs tabular-nums">
+                  {(f.home_predicted_goals || 0).toFixed(1)} - {(f.away_predicted_goals || 0).toFixed(1)}
+                </Badge>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  CS: {f.home_cs_pct?.toFixed(0)}%/{f.away_cs_pct?.toFixed(0)}%
+                </span>
+              </div>
+            </div>
+          ))}
+        </StatCard>
+
+        {/* News */}
+        <StatCard title="Latest News" icon={<Newspaper className="h-3.5 w-3.5" />} loading={news.isLoading}>
+          {(news.data as any[])?.slice(0, 5).map((n: any, i: number) => (
+            <div key={i} className="py-1.5 border-b border-border/30 last:border-0">
+              <a
+                href={n.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium hover:text-fpl-green transition-colors"
+              >
+                {n.title}
+              </a>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{n.published}</p>
+            </div>
+          ))}
+        </StatCard>
+      </div>
+    </div>
   );
 }

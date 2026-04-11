@@ -1,142 +1,121 @@
-import { useQuery } from '@tanstack/react-query';
-import { Box, Typography, Chip, Alert, Table, TableBody, TableCell, TableHead, TableRow, Paper } from '@mui/material';
-import { api } from '@/lib/api';
-
-// /api/transfers/suggest response shape:
-// rank, out_player, out_player_id, out_team, out_cost,
-// in_player, in_player_id, in_team, in_cost,
-// position, delta_value, out_form, in_form, out_fdr, in_fdr, budget_impact
-
-const fdrColor = (fdr: number): string => {
-  if (fdr <= 2) return '#00ff87';
-  if (fdr <= 3) return '#f5a623';
-  return '#e90052';
-};
-
-const formColor = (form: number): string => {
-  if (form >= 70) return '#00ff87';
-  if (form >= 50) return '#f5a623';
-  return '#e90052';
-};
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import FormBadge from "@/components/FormBadge";
+import FDRBadge from "@/components/FDRBadge";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ArrowRight } from "lucide-react";
 
 export default function TransfersPage() {
   const suggestions = useQuery({
-    queryKey: ['transfers'],
-    queryFn: () => api.getTransferSuggestions({ top: '10' }),
+    queryKey: ["transfers"],
+    queryFn: () => api.getTransferSuggestions({ top: "10" }),
   });
 
   const rows = (suggestions.data as any[]) ?? [];
 
+  if (suggestions.isLoading) {
+    return (
+      <div>
+        <PageHeader title="Transfer Suggestions" />
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>Transfer Suggestions</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Recommended transfers based on form, fixture difficulty, and value.
-      </Typography>
+    <div>
+      <PageHeader title="Transfer Suggestions" subtitle="Recommended transfers based on form, fixture difficulty, and value." />
 
       {suggestions.isError && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          Transfer suggestions unavailable — ensure you have loaded your team in Settings.
+        <Alert className="mb-4 border-fpl-gold/30 bg-fpl-gold/5">
+          <AlertDescription>Transfer suggestions unavailable. Ensure you have loaded your team in Settings.</AlertDescription>
         </Alert>
       )}
 
-      <Paper sx={{ overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell align="center">#</TableCell>
-              <TableCell>Out</TableCell>
-              <TableCell>In</TableCell>
-              <TableCell align="center">Pos</TableCell>
-              <TableCell align="right">Cost Out</TableCell>
-              <TableCell align="right">Cost In</TableCell>
-              <TableCell align="right">Budget Impact</TableCell>
-              <TableCell align="center">Form Out</TableCell>
-              <TableCell align="center">Form In</TableCell>
-              <TableCell align="center">FDR Out</TableCell>
-              <TableCell align="center">FDR In</TableCell>
-              <TableCell align="right">Delta Value</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((r: any) => (
-              <TableRow key={r.rank} hover>
-                <TableCell align="center">
-                  <Typography fontWeight={700} color="text.secondary">{r.rank}</Typography>
-                </TableCell>
-                <TableCell>
-                  <Box>
-                    <Typography fontWeight={600} color="error.main">{r.out_player}</Typography>
-                    <Typography variant="caption" color="text.secondary">{r.out_team}</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box>
-                    <Typography fontWeight={600} color="success.main">{r.in_player}</Typography>
-                    <Typography variant="caption" color="text.secondary">{r.in_team}</Typography>
-                  </Box>
-                </TableCell>
-                <TableCell align="center">
-                  <Chip label={r.position} size="small" variant="outlined" />
-                </TableCell>
-                <TableCell align="right">£{parseFloat(r.out_cost) || 0}m</TableCell>
-                <TableCell align="right">£{parseFloat(r.in_cost) || 0}m</TableCell>
-                <TableCell align="right">
-                  <Typography
-                    fontWeight={600}
-                    color={(r.budget_impact || 0) >= 0 ? 'success.main' : 'error.main'}
-                  >
-                    {(r.budget_impact || 0) >= 0 ? '+' : ''}{r.budget_impact}
-                  </Typography>
-                </TableCell>
-                <TableCell align="center">
-                  <Chip
-                    label={(r.out_form || 0).toFixed(1)}
-                    size="small"
-                    sx={{ bgcolor: `${formColor(r.out_form || 0)}22`, color: formColor(r.out_form || 0), fontWeight: 700, border: `1px solid ${formColor(r.out_form || 0)}` }}
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Chip
-                    label={(r.in_form || 0).toFixed(1)}
-                    size="small"
-                    sx={{ bgcolor: `${formColor(r.in_form || 0)}22`, color: formColor(r.in_form || 0), fontWeight: 700, border: `1px solid ${formColor(r.in_form || 0)}` }}
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Chip
-                    label={(r.out_fdr || 0).toFixed(1)}
-                    size="small"
-                    sx={{ bgcolor: fdrColor(r.out_fdr || 3), color: '#000', fontWeight: 700 }}
-                  />
-                </TableCell>
-                <TableCell align="center">
-                  <Chip
-                    label={(r.in_fdr || 0).toFixed(1)}
-                    size="small"
-                    sx={{ bgcolor: fdrColor(r.in_fdr || 3), color: '#000', fontWeight: 700 }}
-                  />
-                </TableCell>
-                <TableCell align="right">
-                  <Typography
-                    fontWeight={700}
-                    color={(r.delta_value || 0) > 0 ? 'success.main' : 'error.main'}
-                  >
-                    {(r.delta_value || 0) > 0 ? '+' : ''}{(r.delta_value || 0).toFixed(1)}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && !suggestions.isLoading && (
-              <TableRow>
-                <TableCell colSpan={12} align="center">
-                  <Typography color="text.secondary" sx={{ py: 3 }}>No transfer suggestions available</Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </Paper>
-    </Box>
+      <Card>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/20 hover:bg-muted/20">
+                  <TableHead className="h-9 px-3 text-xs w-12">#</TableHead>
+                  <TableHead className="h-9 px-3 text-xs">Out</TableHead>
+                  <TableHead className="h-9 px-3 text-xs w-8"></TableHead>
+                  <TableHead className="h-9 px-3 text-xs">In</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-center">Pos</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-right">Cost Out</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-right">Cost In</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-right">Budget</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-center">Form Out</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-center">Form In</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-center">FDR Out</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-center">FDR In</TableHead>
+                  <TableHead className="h-9 px-3 text-xs text-right">Delta</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r: any) => (
+                  <TableRow key={r.rank} className="border-b border-border/20">
+                    <TableCell className="px-3 py-2 text-sm text-muted-foreground font-bold tabular-nums">{r.rank}</TableCell>
+                    <TableCell className="px-3 py-2">
+                      <span className="font-semibold text-sm text-fpl-pink">{r.out_player}</span>
+                      <span className="block text-[10px] text-muted-foreground">{r.out_team}</span>
+                    </TableCell>
+                    <TableCell className="px-1 py-2">
+                      <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                    </TableCell>
+                    <TableCell className="px-3 py-2">
+                      <span className="font-semibold text-sm text-fpl-green">{r.in_player}</span>
+                      <span className="block text-[10px] text-muted-foreground">{r.in_team}</span>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <Badge variant="outline" className="text-[10px]">{r.position}</Badge>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-right text-sm tabular-nums">{'\u00A3'}{parseFloat(r.out_cost) || 0}m</TableCell>
+                    <TableCell className="px-3 py-2 text-right text-sm tabular-nums">{'\u00A3'}{parseFloat(r.in_cost) || 0}m</TableCell>
+                    <TableCell className="px-3 py-2 text-right">
+                      <span className={`font-semibold text-sm tabular-nums ${(r.budget_impact || 0) >= 0 ? "text-fpl-green" : "text-fpl-pink"}`}>
+                        {(r.budget_impact || 0) >= 0 ? "+" : ""}{r.budget_impact}
+                      </span>
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <FormBadge value={r.out_form || 0} />
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <FormBadge value={r.in_form || 0} />
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <FDRBadge fdr={r.out_fdr || 3} />
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-center">
+                      <FDRBadge fdr={r.in_fdr || 3} />
+                    </TableCell>
+                    <TableCell className="px-3 py-2 text-right">
+                      <span className={`font-bold text-sm tabular-nums ${(r.delta_value || 0) > 0 ? "text-fpl-green" : "text-fpl-pink"}`}>
+                        {(r.delta_value || 0) > 0 ? "+" : ""}{(r.delta_value || 0).toFixed(1)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {rows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={13} className="py-8 text-center text-muted-foreground">
+                      No transfer suggestions available
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

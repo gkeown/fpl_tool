@@ -1,8 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { ThemeProvider, CssBaseline } from "@mui/material";
-import theme from "./theme";
-import Layout from "./components/Layout";
+import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import MyTeamPage from "./pages/MyTeamPage";
 import PlayersPage from "./pages/PlayersPage";
@@ -17,25 +15,22 @@ const queryClient = new QueryClient({
 });
 
 const App = () => (
-  <ThemeProvider theme={theme}>
-    <CssBaseline />
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/team" element={<MyTeamPage />} />
-            <Route path="/players" element={<PlayersPage />} />
-            <Route path="/players/:id" element={<PlayerDetailPage />} />
-            <Route path="/fixtures" element={<FixturesPage />} />
-            <Route path="/transfers" element={<TransfersPage />} />
-            <Route path="/prices" element={<PricesPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
-  </ThemeProvider>
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/team" element={<MyTeamPage />} />
+          <Route path="/players" element={<PlayersPage />} />
+          <Route path="/players/:id" element={<PlayerDetailPage />} />
+          <Route path="/fixtures" element={<FixturesPage />} />
+          <Route path="/transfers" element={<TransfersPage />} />
+          <Route path="/prices" element={<PricesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  </QueryClientProvider>
 );
 
 export default App;

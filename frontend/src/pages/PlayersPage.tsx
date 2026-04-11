@@ -1,163 +1,171 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Box, Typography, Chip, TextField, InputAdornment } from '@mui/material';
-import { Search } from '@mui/icons-material';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { useNavigate } from 'react-router-dom';
-import { api } from '@/lib/api';
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { ColumnDef } from "@tanstack/react-table";
+import { api, FormPlayer } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import FormBadge from "@/components/FormBadge";
+import { DataTable } from "@/components/DataTable";
+import { Input } from "@/components/ui/input";
+import { Search, X } from "lucide-react";
 
-const columns: GridColDef[] = [
-  { field: 'rank', headerName: '#', width: 60, type: 'number' },
-  { field: 'player', headerName: 'Player', flex: 1, minWidth: 130 },
-  { field: 'team', headerName: 'Team', width: 80 },
-  { field: 'position', headerName: 'Pos', width: 70 },
+const formColumns: ColumnDef<FormPlayer, any>[] = [
   {
-    field: 'cost', headerName: 'Cost', width: 85,
-    valueFormatter: (v: any) => `£${parseFloat(v) || 0}m`,
+    accessorKey: "rank",
+    header: "#",
+    cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{row.original.rank}</span>,
+    enableSorting: false,
+    size: 50,
   },
   {
-    field: 'form', headerName: 'Form', width: 85,
-    renderCell: (p) => {
-      const val = Number(p.value);
-      const color = val >= 8 ? '#00ff87' : val >= 5 ? '#f5a623' : '#e90052';
-      return (
-        <Chip
-          label={val.toFixed(1)}
-          size="small"
-          sx={{ bgcolor: `${color}22`, color, fontWeight: 700, border: `1px solid ${color}` }}
-        />
-      );
-    },
+    accessorKey: "player",
+    header: "Player",
+    cell: ({ row }) => <span className="font-medium">{row.original.player}</span>,
+  },
+  { accessorKey: "team", header: "Team", size: 80 },
+  { accessorKey: "position", header: "Pos", size: 60 },
+  {
+    accessorKey: "cost",
+    header: "Cost",
+    cell: ({ row }) => <span className="tabular-nums">{'\u00A3'}{row.original.cost}m</span>,
+    size: 80,
   },
   {
-    field: 'xg_per90', headerName: 'xG/90', width: 90, type: 'number',
-    valueFormatter: (v: any) => v != null ? Number(v).toFixed(3) : '-',
+    accessorKey: "form",
+    header: "Form",
+    cell: ({ row }) => <FormBadge value={row.original.form} />,
+    size: 80,
   },
   {
-    field: 'xa_per90', headerName: 'xA/90', width: 90, type: 'number',
-    valueFormatter: (v: any) => v != null ? Number(v).toFixed(3) : '-',
+    accessorKey: "xg_per90",
+    header: "xG/90",
+    cell: ({ row }) => <span className="tabular-nums">{row.original.xg_per90 != null ? row.original.xg_per90.toFixed(3) : "-"}</span>,
+    size: 80,
   },
   {
-    field: 'pts_per90', headerName: 'Pts/90', width: 90, type: 'number',
-    valueFormatter: (v: any) => v != null ? Number(v).toFixed(1) : '-',
+    accessorKey: "xa_per90",
+    header: "xA/90",
+    cell: ({ row }) => <span className="tabular-nums">{row.original.xa_per90 != null ? row.original.xa_per90.toFixed(3) : "-"}</span>,
+    size: 80,
+  },
+  {
+    accessorKey: "pts_per90",
+    header: "Pts/90",
+    cell: ({ row }) => <span className="tabular-nums">{row.original.pts_per90 != null ? row.original.pts_per90.toFixed(1) : "-"}</span>,
+    size: 80,
   },
 ];
 
-const searchColumns: GridColDef[] = [
-  { field: 'player', headerName: 'Player', flex: 1, minWidth: 180 },
-  { field: 'web_name', headerName: 'Name', width: 120 },
-  { field: 'team', headerName: 'Team', width: 80 },
-  { field: 'position', headerName: 'Pos', width: 70 },
+const searchColumns: ColumnDef<any, any>[] = [
   {
-    field: 'cost', headerName: 'Cost', width: 85,
-    valueFormatter: (v: any) => `£${parseFloat(v) || 0}m`,
+    accessorKey: "player",
+    header: "Player",
+    cell: ({ row }) => <span className="font-medium">{row.original.player || row.original.web_name}</span>,
   },
-  { field: 'status', headerName: 'Status', width: 80 },
+  { accessorKey: "team", header: "Team", size: 80 },
+  { accessorKey: "position", header: "Pos", size: 60 },
   {
-    field: 'score', headerName: 'Match%', width: 85, type: 'number',
-    valueFormatter: (v: any) => v != null ? `${Number(v).toFixed(0)}%` : '-',
+    accessorKey: "cost",
+    header: "Cost",
+    cell: ({ row }) => <span className="tabular-nums">{'\u00A3'}{parseFloat(row.original.cost) || 0}m</span>,
+    size: 80,
+  },
+  { accessorKey: "status", header: "Status", size: 70 },
+  {
+    accessorKey: "score",
+    header: "Match%",
+    cell: ({ row }) => (
+      <span className="tabular-nums">
+        {row.original.score != null ? `${Number(row.original.score).toFixed(0)}%` : "-"}
+      </span>
+    ),
+    size: 80,
   },
 ];
 
 export default function PlayersPage() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const players = useQuery({
-    queryKey: ['playersForm'],
-    queryFn: () => api.getPlayers({ top: '50' }),
+    queryKey: ["playersForm"],
+    queryFn: () => api.getPlayers({ top: "50" }),
   });
 
   const searchResults = useQuery({
-    queryKey: ['playerSearch', searchQuery],
+    queryKey: ["playerSearch", searchQuery],
     queryFn: () => api.searchPlayers(searchQuery),
     enabled: searchQuery.length >= 2,
   });
 
   const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      setSearchQuery(search.trim());
-    }
+    if (e.key === "Enter") setSearchQuery(search.trim());
   };
 
   const showingSearch = searchQuery.length >= 2 && searchResults.data;
-  const formRows = (players.data as any[]) ?? [];
+  const formRows = (players.data as FormPlayer[]) ?? [];
   const searchRows = (searchResults.data as any[]) ?? [];
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>Players</Typography>
+    <div>
+      <PageHeader title="Players" subtitle="Top players by FPL form" />
 
-      <TextField
-        fullWidth
-        placeholder="Search for any player... (press Enter)"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        onKeyDown={handleSearch}
-        sx={{ mb: 3 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <Search />
-              </InputAdornment>
-            ),
-          },
-        }}
-      />
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search for any player... (press Enter)"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleSearch}
+          className="pl-10 pr-10"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => { setSearch(""); setSearchQuery(""); }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
 
       {showingSearch ? (
-        <>
-          <Typography variant="h6" gutterBottom>
-            Search results for "{searchQuery}"
-          </Typography>
-          <DataGrid
-            rows={searchRows}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-display font-semibold">Search: "{searchQuery}"</h2>
+            <button
+              onClick={() => { setSearch(""); setSearchQuery(""); }}
+              className="text-sm text-fpl-green hover:underline"
+            >
+              Clear search
+            </button>
+          </div>
+          <DataTable
             columns={searchColumns}
+            data={searchRows}
             loading={searchResults.isLoading}
-            getRowId={(r) => r.id}
-            autoHeight
-            pageSizeOptions={[20]}
-            disableRowSelectionOnClick
-            onRowClick={(p) => navigate(`/players/${p.id}`)}
-            sx={{ cursor: 'pointer', mb: 3 }}
+            onRowClick={(row: any) => navigate(`/players/${row.id}`)}
+            enablePagination={false}
           />
-          <Typography
-            variant="body2"
-            color="primary"
-            sx={{ cursor: 'pointer', mb: 3 }}
-            onClick={() => { setSearch(''); setSearchQuery(''); }}
-          >
-            Clear search — show form table
-          </Typography>
-        </>
+        </div>
       ) : (
-        <>
-          <Typography variant="h6" gutterBottom>
-            Form Rankings
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Top players by FPL form. Click a row for full details.
-          </Typography>
-          <DataGrid
-            rows={formRows}
-            columns={columns}
+        <div>
+          <h2 className="text-lg font-display font-semibold mb-1">Form Rankings</h2>
+          <p className="text-sm text-muted-foreground mb-3">Click a row for full details.</p>
+          <DataTable
+            columns={formColumns}
+            data={formRows}
             loading={players.isLoading}
-            getRowId={(r) => r.id}
-            autoHeight
-            pageSizeOptions={[20, 50]}
-            initialState={{ pagination: { paginationModel: { pageSize: 20 } } }}
-            onRowClick={(p) => navigate(`/players/${p.id}`)}
-            sx={{ cursor: 'pointer' }}
-            disableRowSelectionOnClick
+            pageSize={20}
+            onRowClick={(row: FormPlayer) => navigate(`/players/${row.id}`)}
           />
-        </>
+        </div>
       )}
 
       {players.isError && (
-        <Typography color="error" sx={{ mt: 2 }}>Failed to load player data.</Typography>
+        <p className="text-sm text-fpl-pink mt-4">Failed to load player data.</p>
       )}
-    </Box>
+    </div>
   );
 }

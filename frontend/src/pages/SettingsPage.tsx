@@ -1,15 +1,14 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  Box, Typography, TextField, Button, CircularProgress, Alert,
-  Table, TableBody, TableCell, TableHead, TableRow, Paper, Chip,
-} from '@mui/material';
-import { Refresh } from '@mui/icons-material';
-import { api } from '@/lib/api';
-
-// /api/data/status response shape:
-// source, status, records_upserted, started_at, finished_at,
-// duration_secs, age_secs, error_message
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RotateCw, Loader2, CheckCircle, XCircle } from "lucide-react";
 
 function formatAge(secs: number): string {
   if (secs < 60) return `${Math.round(secs)}s ago`;
@@ -18,155 +17,165 @@ function formatAge(secs: number): string {
 }
 
 function formatDuration(secs: number): string {
-  return secs != null ? `${secs.toFixed(1)}s` : '-';
+  return secs != null ? `${secs.toFixed(1)}s` : "-";
 }
 
 export default function SettingsPage() {
   const qc = useQueryClient();
-  const [teamId, setTeamId] = useState('');
+  const [teamId, setTeamId] = useState("");
 
-  const status = useQuery({
-    queryKey: ['dataStatus'],
-    queryFn: () => api.getDataStatus(),
-  });
+  const status = useQuery({ queryKey: ["dataStatus"], queryFn: () => api.getDataStatus() });
 
-  // POST /api/me/login?team_id=123
   const loadTeam = useMutation({
     mutationFn: () => api.loadTeam(Number(teamId)),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['team'] });
-      qc.invalidateQueries({ queryKey: ['teamAnalysis'] });
+      qc.invalidateQueries({ queryKey: ["team"] });
+      qc.invalidateQueries({ queryKey: ["teamAnalysis"] });
     },
   });
 
-  // POST /api/data/refresh
   const refreshAll = useMutation({
     mutationFn: () => api.refreshAll(),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['dataStatus'] });
+      qc.invalidateQueries({ queryKey: ["dataStatus"] });
     },
   });
 
   const statusRows = (status.data as any[]) ?? [];
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>Settings</Typography>
+    <div>
+      <PageHeader title="Settings" />
 
-      {/* Team Login */}
-      <Box sx={{ mb: 4, p: 3, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 2 }}>
-        <Typography variant="h6" gutterBottom>Load FPL Team</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Enter your FPL team ID to load your squad, transfers, and analysis.
-          Your team ID is in the URL when you visit the FPL website (e.g. fantasy.premierleague.com/entry/<strong>123456</strong>/event/1).
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-          <TextField
-            label="FPL Team ID"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
-            size="small"
-            type="number"
-            sx={{ width: 200 }}
-            placeholder="e.g. 123456"
-          />
-          <Button
-            variant="contained"
-            onClick={() => loadTeam.mutate()}
-            disabled={!teamId || loadTeam.isPending}
-            startIcon={loadTeam.isPending ? <CircularProgress size={16} /> : null}
-          >
-            {loadTeam.isPending ? 'Loading...' : 'Load Team'}
-          </Button>
-        </Box>
-        {loadTeam.isSuccess && (
-          <Alert severity="success" sx={{ mt: 2 }}>Team loaded successfully! Your squad data is now available.</Alert>
-        )}
-        {loadTeam.isError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            Failed to load team. Check your team ID and try again.
-          </Alert>
-        )}
-      </Box>
+      {/* Load Team */}
+      <Card className="card-stripe mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-sans font-semibold uppercase tracking-widest text-muted-foreground">
+            Load FPL Team
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-3">
+            Enter your FPL team ID. Find it in the URL at fantasy.premierleague.com/entry/<strong className="text-foreground">123456</strong>/event/1.
+          </p>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Input
+              type="number"
+              placeholder="e.g. 123456"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              className="w-48"
+            />
+            <Button
+              onClick={() => loadTeam.mutate()}
+              disabled={!teamId || loadTeam.isPending}
+              className="bg-fpl-green text-black hover:bg-fpl-green/80 font-semibold"
+            >
+              {loadTeam.isPending && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+              {loadTeam.isPending ? "Loading..." : "Load Team"}
+            </Button>
+          </div>
+          {loadTeam.isSuccess && (
+            <Alert className="mt-3 border-fpl-green/30 bg-fpl-green/5">
+              <CheckCircle className="h-4 w-4 text-fpl-green" />
+              <AlertDescription>Team loaded successfully! Your squad data is now available.</AlertDescription>
+            </Alert>
+          )}
+          {loadTeam.isError && (
+            <Alert variant="destructive" className="mt-3">
+              <XCircle className="h-4 w-4" />
+              <AlertDescription>Failed to load team. Check your team ID and try again.</AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Data Status */}
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">Data Status</Typography>
+      <Card className="card-stripe">
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-sans font-semibold uppercase tracking-widest text-muted-foreground">
+            Data Status
+          </CardTitle>
           <Button
-            variant="outlined"
-            color="primary"
+            variant="outline"
+            size="sm"
             onClick={() => refreshAll.mutate()}
             disabled={refreshAll.isPending}
-            startIcon={refreshAll.isPending ? <CircularProgress size={16} /> : <Refresh />}
-            size="small"
           >
-            {refreshAll.isPending ? 'Refreshing...' : 'Refresh All Data'}
+            {refreshAll.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RotateCw className="h-4 w-4 mr-1" />}
+            {refreshAll.isPending ? "Refreshing..." : "Refresh All"}
           </Button>
-        </Box>
+        </CardHeader>
+        <CardContent>
+          {refreshAll.isSuccess && (
+            <Alert className="mb-3 border-fpl-green/30 bg-fpl-green/5">
+              <CheckCircle className="h-4 w-4 text-fpl-green" />
+              <AlertDescription>All data sources refreshed successfully.</AlertDescription>
+            </Alert>
+          )}
+          {refreshAll.isError && (
+            <Alert variant="destructive" className="mb-3">
+              <XCircle className="h-4 w-4" />
+              <AlertDescription>Refresh failed. Check the server logs.</AlertDescription>
+            </Alert>
+          )}
 
-        {refreshAll.isSuccess && (
-          <Alert severity="success" sx={{ mb: 2 }}>All data sources refreshed successfully.</Alert>
-        )}
-        {refreshAll.isError && (
-          <Alert severity="error" sx={{ mb: 2 }}>Refresh failed. Check the server logs.</Alert>
-        )}
-
-        <Paper>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Source</TableCell>
-                <TableCell align="center">Status</TableCell>
-                <TableCell align="right">Records</TableCell>
-                <TableCell align="right">Duration</TableCell>
-                <TableCell align="right">Last Run</TableCell>
-                <TableCell>Error</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {statusRows.map((row: any) => (
-                <TableRow key={row.source} hover>
-                  <TableCell>
-                    <Typography fontWeight={600}>{row.source}</Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={row.status}
-                      size="small"
-                      color={row.status === 'success' ? 'success' : 'error'}
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell align="right">
-                    {row.records_upserted != null ? row.records_upserted.toLocaleString() : '-'}
-                  </TableCell>
-                  <TableCell align="right">{formatDuration(row.duration_secs)}</TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="text.secondary">
-                      {row.age_secs != null ? formatAge(row.age_secs) : '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {row.error_message ? (
-                      <Typography variant="caption" color="error.main">{row.error_message}</Typography>
-                    ) : (
-                      <Typography variant="caption" color="text.disabled">—</Typography>
-                    )}
-                  </TableCell>
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/20 hover:bg-muted/20">
+                  <TableHead className="h-8 px-3 text-xs">Source</TableHead>
+                  <TableHead className="h-8 px-3 text-xs text-center">Status</TableHead>
+                  <TableHead className="h-8 px-3 text-xs text-right">Records</TableHead>
+                  <TableHead className="h-8 px-3 text-xs text-right">Duration</TableHead>
+                  <TableHead className="h-8 px-3 text-xs text-right">Last Run</TableHead>
+                  <TableHead className="h-8 px-3 text-xs">Error</TableHead>
                 </TableRow>
-              ))}
-              {statusRows.length === 0 && !status.isLoading && (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    <Typography color="text.secondary" sx={{ py: 2 }}>No data status available</Typography>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </Paper>
-      </Box>
-    </Box>
+              </TableHeader>
+              <TableBody>
+                {statusRows.map((row: any) => (
+                  <TableRow key={row.source} className="border-b border-border/20">
+                    <TableCell className="px-3 py-1.5 font-semibold text-sm">{row.source}</TableCell>
+                    <TableCell className="px-3 py-1.5 text-center">
+                      <Badge
+                        variant="outline"
+                        className={
+                          row.status === "success"
+                            ? "bg-fpl-green/10 text-fpl-green border-fpl-green/30 text-xs"
+                            : "bg-fpl-pink/10 text-fpl-pink border-fpl-pink/30 text-xs"
+                        }
+                      >
+                        {row.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-right text-sm tabular-nums">
+                      {row.records_upserted != null ? row.records_upserted.toLocaleString() : "-"}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-right text-sm tabular-nums">{formatDuration(row.duration_secs)}</TableCell>
+                    <TableCell className="px-3 py-1.5 text-right text-sm text-muted-foreground">
+                      {row.age_secs != null ? formatAge(row.age_secs) : "-"}
+                    </TableCell>
+                    <TableCell className="px-3 py-1.5 text-xs">
+                      {row.error_message ? (
+                        <span className="text-fpl-pink">{row.error_message}</span>
+                      ) : (
+                        <span className="text-muted-foreground/50">&mdash;</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {statusRows.length === 0 && !status.isLoading && (
+                  <TableRow>
+                    <TableCell colSpan={6} className="py-6 text-center text-muted-foreground">
+                      No data status available
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

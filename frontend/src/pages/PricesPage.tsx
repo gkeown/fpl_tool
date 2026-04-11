@@ -1,118 +1,113 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Box, Typography, Tabs, Tab, Chip } from '@mui/material';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { api } from '@/lib/api';
+import { useQuery } from "@tanstack/react-query";
+import { ColumnDef } from "@tanstack/react-table";
+import { api, PricePlayer } from "@/lib/api";
+import PageHeader from "@/components/PageHeader";
+import { DataTable } from "@/components/DataTable";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
-// /api/prices/risers and /api/prices/fallers response shape:
-// rank, id, player, team, position, cost, ownership,
-// transfers_in_event, transfers_out_event, net_transfers_event, pressure
+function PressureBar({ value, color }: { value: number; color: string }) {
+  const width = Math.min(Math.abs(value), 100);
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${width}%`, backgroundColor: color }}
+        />
+      </div>
+      <span className="text-xs tabular-nums min-w-[30px] text-right" style={{ color }}>
+        {value.toFixed(1)}
+      </span>
+    </div>
+  );
+}
 
-const makeColumns = (isRisers: boolean): GridColDef[] => [
-  { field: 'rank', headerName: '#', width: 60, type: 'number' },
-  { field: 'player', headerName: 'Player', flex: 1, minWidth: 130 },
-  { field: 'team', headerName: 'Team', width: 80 },
-  { field: 'position', headerName: 'Pos', width: 70 },
-  {
-    field: 'cost', headerName: 'Price', width: 90,
-    valueFormatter: (v: any) => v != null ? `£${parseFloat(v)}m` : '-',
-  },
-  {
-    field: 'ownership', headerName: 'Own%', width: 85, type: 'number',
-    valueFormatter: (v: number) => v != null ? `${v.toFixed(1)}%` : '-',
-  },
-  {
-    field: 'transfers_in_event', headerName: 'Transfers In', width: 120, type: 'number',
-    valueFormatter: (v: number) => v != null ? v.toLocaleString() : '-',
-  },
-  {
-    field: 'transfers_out_event', headerName: 'Transfers Out', width: 125, type: 'number',
-    valueFormatter: (v: number) => v != null ? v.toLocaleString() : '-',
-  },
-  {
-    field: 'net_transfers_event', headerName: 'Net Transfers', width: 130, type: 'number',
-    renderCell: (p) => {
-      const val = p.value as number;
-      const color = val > 0 ? '#00ff87' : '#e90052';
-      return (
-        <Typography sx={{ color, fontWeight: 600 }}>
-          {val > 0 ? '+' : ''}{(val || 0).toLocaleString()}
-        </Typography>
-      );
+function makeColumns(isRisers: boolean): ColumnDef<PricePlayer, any>[] {
+  const accentColor = isRisers ? "#00ff87" : "#e90052";
+  return [
+    {
+      accessorKey: "rank", header: "#", size: 50,
+      cell: ({ row }) => <span className="text-muted-foreground tabular-nums">{row.original.rank}</span>,
+      enableSorting: false,
     },
-  },
-  {
-    field: 'pressure', headerName: 'Pressure', width: 130,
-    renderCell: (p) => {
-      const val = Math.abs(p.value as number ?? 0);
-      const color = isRisers ? '#00ff87' : '#e90052';
-      return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-          <Box sx={{ flex: 1, height: 8, borderRadius: 4, bgcolor: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-            <Box
-              sx={{
-                width: `${Math.min(val, 100)}%`,
-                height: '100%',
-                borderRadius: 4,
-                bgcolor: color,
-              }}
-            />
-          </Box>
-          <Typography variant="caption" sx={{ color, minWidth: 35, textAlign: 'right' }}>
-            {(p.value as number ?? 0).toFixed(1)}
-          </Typography>
-        </Box>
-      );
+    {
+      accessorKey: "player", header: "Player",
+      cell: ({ row }) => <span className="font-medium">{row.original.player}</span>,
     },
-  },
-];
+    { accessorKey: "team", header: "Team", size: 70 },
+    { accessorKey: "position", header: "Pos", size: 60 },
+    {
+      accessorKey: "price", header: "Price", size: 80,
+      cell: ({ row }) => <span className="tabular-nums">{'\u00A3'}{row.original.price}m</span>,
+    },
+    {
+      accessorKey: "ownership_pct", header: "Own%", size: 75,
+      cell: ({ row }) => <span className="tabular-nums">{row.original.ownership_pct?.toFixed(1)}%</span>,
+    },
+    {
+      accessorKey: "transfers_in_event", header: "In", size: 90,
+      cell: ({ row }) => <span className="tabular-nums">{(row.original.transfers_in_event || 0).toLocaleString()}</span>,
+    },
+    {
+      accessorKey: "transfers_out_event", header: "Out", size: 90,
+      cell: ({ row }) => <span className="tabular-nums">{(row.original.transfers_out_event || 0).toLocaleString()}</span>,
+    },
+    {
+      accessorKey: "net_transfers_event", header: "Net", size: 100,
+      cell: ({ row }) => {
+        const val = row.original.net_transfers_event || 0;
+        return (
+          <span className={`font-semibold tabular-nums ${val > 0 ? "text-fpl-green" : "text-fpl-pink"}`}>
+            {val > 0 ? "+" : ""}{val.toLocaleString()}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "pressure", header: "Pressure", size: 130,
+      cell: ({ row }) => <PressureBar value={Math.abs(row.original.pressure || 0)} color={accentColor} />,
+    },
+  ];
+}
 
 export default function PricesPage() {
-  const [tab, setTab] = useState(0);
-
-  const risers = useQuery({
-    queryKey: ['risers'],
-    queryFn: () => api.getPriceRisers(20),
-    enabled: tab === 0,
-  });
-  const fallers = useQuery({
-    queryKey: ['fallers'],
-    queryFn: () => api.getPriceFallers(20),
-    enabled: tab === 1,
-  });
-
-  const isRisers = tab === 0;
-  const activeQuery = isRisers ? risers : fallers;
-  const rows = (activeQuery.data as any[]) ?? [];
-  const columns = makeColumns(isRisers);
+  const risers = useQuery({ queryKey: ["risers"], queryFn: () => api.getPriceRisers(20) });
+  const fallers = useQuery({ queryKey: ["fallers"], queryFn: () => api.getPriceFallers(20) });
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>Price Changes</Typography>
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-        <Tab label="Risers" />
-        <Tab label="Fallers" />
+    <div>
+      <PageHeader title="Price Changes" />
+      <Tabs defaultValue="risers">
+        <TabsList className="bg-muted/50 mb-4">
+          <TabsTrigger value="risers" className="data-[state=active]:bg-background data-[state=active]:text-fpl-green data-[state=active]:shadow-sm">Risers</TabsTrigger>
+          <TabsTrigger value="fallers" className="data-[state=active]:bg-background data-[state=active]:text-fpl-pink data-[state=active]:shadow-sm">Fallers</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="risers">
+          <Badge variant="outline" className="mb-3 bg-fpl-green/5 text-fpl-green border-fpl-green/30 text-xs">
+            Price rising &mdash; high transfer activity
+          </Badge>
+          <DataTable
+            columns={makeColumns(true)}
+            data={(risers.data as PricePlayer[]) ?? []}
+            loading={risers.isLoading}
+            pageSize={20}
+          />
+        </TabsContent>
+
+        <TabsContent value="fallers">
+          <Badge variant="outline" className="mb-3 bg-fpl-pink/5 text-fpl-pink border-fpl-pink/30 text-xs">
+            Price falling &mdash; high outflow
+          </Badge>
+          <DataTable
+            columns={makeColumns(false)}
+            data={(fallers.data as PricePlayer[]) ?? []}
+            loading={fallers.isLoading}
+            pageSize={20}
+          />
+        </TabsContent>
       </Tabs>
-
-      <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-        <Chip
-          label={isRisers ? 'Price rising — high transfer activity' : 'Price falling — high outflow'}
-          size="small"
-          color={isRisers ? 'success' : 'error'}
-          variant="outlined"
-        />
-      </Box>
-
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        getRowId={(r) => r.id}
-        autoHeight
-        pageSizeOptions={[20, 50]}
-        initialState={{ pagination: { paginationModel: { pageSize: 20 } } }}
-        disableRowSelectionOnClick
-        loading={activeQuery.isLoading}
-      />
-    </Box>
+    </div>
   );
 }
