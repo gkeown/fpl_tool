@@ -207,6 +207,10 @@ export default function ScoresPage() {
 
   const data = scores.data as any;
   const allLeagues = data?.leagues ?? [];
+  const cachedAt = data?.cached_at;
+  const lastUpdated = cachedAt
+    ? new Date(cachedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
 
   return (
     <div>
@@ -218,6 +222,11 @@ export default function ScoresPage() {
               <span className="flex items-center gap-1 text-xs text-fpl-green">
                 <Circle className="h-2 w-2 fill-fpl-green animate-pulse" />
                 Auto-updating
+              </span>
+            )}
+            {lastUpdated && (
+              <span className="text-[10px] text-muted-foreground">
+                {lastUpdated}
               </span>
             )}
             <Button

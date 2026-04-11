@@ -28,7 +28,7 @@ _scheduler: AsyncIOScheduler | None = None
 # UK timezone for match windows
 _UK = ZoneInfo("Europe/London")
 
-# Match windows: (day_of_week, start_time, end_time)
+# FPL data refresh windows: (day_of_week, start_time, end_time)
 # Monday=0 .. Sunday=6
 _MATCH_WINDOWS: list[tuple[int, time, time]] = [
     (5, time(12, 30), time(19, 30)),  # Saturday
@@ -36,19 +36,37 @@ _MATCH_WINDOWS: list[tuple[int, time, time]] = [
     (0, time(20, 0), time(22, 30)),   # Monday
 ]
 
+# Score refresh windows (wider, covers all European leagues)
+_SCORE_WINDOWS: list[tuple[int, time, time]] = [
+    (4, time(19, 0), time(23, 0)),    # Friday evening
+    (5, time(12, 0), time(22, 0)),    # Saturday
+    (6, time(12, 0), time(22, 0)),    # Sunday
+    (0, time(19, 0), time(23, 0)),    # Monday evening
+]
 
-def _in_match_window() -> bool:
-    """Check if current UK time falls within a match window."""
+
+def _in_window(
+    windows: list[tuple[int, time, time]],
+) -> bool:
+    """Check if current UK time falls within any of the given windows."""
     from datetime import datetime
 
     now = datetime.now(_UK)
     day = now.weekday()
     current = now.time()
 
-    for window_day, start, end in _MATCH_WINDOWS:
+    for window_day, start, end in windows:
         if day == window_day and start <= current <= end:
             return True
     return False
+
+
+def _in_match_window() -> bool:
+    return _in_window(_MATCH_WINDOWS)
+
+
+def _in_score_window() -> bool:
+    return _in_window(_SCORE_WINDOWS)
 
 
 async def _auto_refresh() -> None:
@@ -71,6 +89,20 @@ async def _auto_refresh() -> None:
         logger.exception("Auto-refresh failed")
 
 
+async def _score_refresh() -> None:
+    """Refresh live score cache if within a score window."""
+    if not _in_score_window():
+        return
+
+    try:
+        from fpl.api.routes.scores import refresh_score_cache
+
+        await refresh_score_cache()
+        logger.info("Score cache refreshed")
+    except Exception:
+        logger.exception("Score cache refresh failed")
+
+
 def start_scheduler() -> None:
     """Start the background scheduler if auto_refresh is enabled."""
     global _scheduler
@@ -88,10 +120,15 @@ def start_scheduler() -> None:
         id="match_day_refresh",
         replace_existing=True,
     )
-    _scheduler.start()
-    logger.info(
-        "Scheduler started — refreshing every 5 min during match windows"
+    _scheduler.add_job(
+        _score_refresh,
+        "interval",
+        seconds=60,
+        id="score_refresh",
+        replace_existing=True,
     )
+    _scheduler.start()
+    logger.info("Scheduler started: FPL data every 5m, scores every 60s")
 
 
 def stop_scheduler() -> None:

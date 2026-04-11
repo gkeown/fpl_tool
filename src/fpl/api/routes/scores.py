@@ -18,6 +18,10 @@ from fpl.config import get_settings
 
 router = APIRouter()
 
+# In-memory score cache, updated by the scheduler
+_score_cache: dict[str, Any] = {}
+_cache_updated_at: str = ""
+
 _ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 
 _LEAGUES = [
@@ -249,14 +253,10 @@ async def _enrich_pl_assists(
                 break
 
 
-@router.get("/today")
-async def today_scores(date: str | None = None) -> dict[str, Any]:
-    """Fetch current matchweek fixtures for all 5 major leagues.
-
-    Uses ESPN public API (no key needed, unlimited).
-    Fetches Fri-Mon of the current matchweek.
-    If FPL_API_FOOTBALL_KEY is set, PL goals are enriched with assists.
-    """
+async def fetch_scores(
+    date: str | None = None,
+) -> dict[str, Any]:
+    """Fetch matchweek scores from ESPN. Used by both the endpoint and scheduler."""
     dates = [date.replace("-", "")] if date else _matchweek_dates()
 
     leagues_out: list[dict[str, Any]] = []
@@ -279,10 +279,8 @@ async def today_scores(date: str | None = None) -> dict[str, Any]:
                         seen_ids.add(eid)
                         all_matches.append(_parse_espn_match(ev))
 
-            # Sort by kickoff time
             all_matches.sort(key=lambda m: m.get("kickoff", ""))
 
-            # Enrich PL with assists
             if league_info["slug"] == "eng.1" and all_matches:
                 with contextlib.suppress(Exception):
                     await _enrich_pl_assists(client, all_matches)
@@ -302,3 +300,35 @@ async def today_scores(date: str | None = None) -> dict[str, Any]:
         "date": display_date,
         "leagues": leagues_out,
     }
+
+
+async def refresh_score_cache() -> None:
+    """Refresh the in-memory score cache. Called by the scheduler."""
+    global _score_cache, _cache_updated_at
+    result = await fetch_scores()
+    _score_cache = result
+    _cache_updated_at = datetime.now(UTC).isoformat()
+
+
+@router.get("/today")
+async def today_scores(
+    date: str | None = None, force: bool = False
+) -> dict[str, Any]:
+    """Return current matchweek scores.
+
+    Serves from cache if available and fresh (updated by scheduler).
+    Falls back to live fetch if no cache or if force=true or custom date.
+    """
+    global _score_cache, _cache_updated_at
+
+    if not force and not date and _score_cache:
+        return {**_score_cache, "cached_at": _cache_updated_at}
+
+    result = await fetch_scores(date)
+
+    # Update cache if this was a default (no custom date) fetch
+    if not date:
+        _score_cache = result
+        _cache_updated_at = datetime.now(UTC).isoformat()
+
+    return result
