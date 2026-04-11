@@ -274,6 +274,7 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "event_points": event_pts,
                     "gw_points": event_pts * multiplier,
                     "gw_bonus": bonus_lookup.get(pid, 0),
+                    "defcon": player.defensive_contribution,
                     "status": player.status,
                     "news": player.news,
                     "is_starter": pick["position"] <= 11,

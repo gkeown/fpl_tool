@@ -36,6 +36,7 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
               <TableHead className="h-8 px-3 text-xs text-right">Form</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">GW Pts</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">Bonus</TableHead>
+              <TableHead className="h-8 px-3 text-xs text-right">DEFCON</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">xPts</TableHead>
               <TableHead className="h-8 px-3 text-xs text-center">Status</TableHead>
             </TableRow>
@@ -70,6 +71,7 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                     {p.gw_bonus ?? 0}
                   </span>
                 </TableCell>
+                <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums text-muted-foreground">{p.defcon ?? 0}</TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">{(p.xpts_next_gw || 0).toFixed(1)}</TableCell>
                 <TableCell className="px-3 py-1.5 text-center">
                   <StatusBadge status={p.status || "a"} />
