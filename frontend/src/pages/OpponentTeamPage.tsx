@@ -9,7 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowRight, Zap } from "lucide-react";
+
+const CHIP_LABELS: Record<string, string> = {
+  wildcard: "Wildcard",
+  freehit: "Free Hit",
+  bboost: "Bench Boost",
+  "3xc": "Triple Captain",
+  manager: "Assistant Manager",
+};
 
 function PlayerTable({ players, title, dimmed }: { players: any[]; title: string; dimmed?: boolean }) {
   return (
@@ -109,6 +117,7 @@ export default function OpponentTeamPage() {
   const d = data as any;
   const starters = d.players?.filter((p: any) => p.is_starter) ?? [];
   const bench = d.players?.filter((p: any) => !p.is_starter) ?? [];
+  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0), 0);
   const transfers: any[] = d.transfers ?? [];
 
   // Group transfers by gameweek, show last 3 GWs
@@ -137,6 +146,7 @@ export default function OpponentTeamPage() {
       <div className="flex flex-wrap gap-2 mb-4">
         <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">GW{d.gameweek}</Badge>
         <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">GW Pts: {d.gameweek_points ?? 0}</Badge>
+        <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">XI Live: {xiTotal}</Badge>
         <Badge variant="outline">{d.overall_points?.toLocaleString()} pts</Badge>
         <Badge variant="outline">Rank: {d.overall_rank?.toLocaleString()}</Badge>
         <Badge variant="outline">Bank: {'\u00A3'}{(d.bank || 0).toFixed(1)}m</Badge>
@@ -147,10 +157,37 @@ export default function OpponentTeamPage() {
             {d.transfers_made} transfer{d.transfers_made > 1 ? "s" : ""} made
           </Badge>
         )}
+        {d.active_chip && (
+          <Badge className="bg-fpl-gold/15 text-fpl-gold border border-fpl-gold/30">
+            <Zap className="h-3 w-3 mr-1" />
+            {CHIP_LABELS[d.active_chip] || d.active_chip} Active
+          </Badge>
+        )}
       </div>
 
       {starters.length > 0 && <PlayerTable players={starters} title="Starting XI" />}
       {bench.length > 0 && <PlayerTable players={bench} title="Bench" dimmed />}
+
+      {/* Chips Used */}
+      {d.chips && d.chips.length > 0 && (
+        <Card className="card-stripe mt-4">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-sans font-semibold uppercase tracking-widest text-muted-foreground">
+              Chips Used
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="flex flex-wrap gap-2">
+              {d.chips.map((c: any, i: number) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  <Zap className="h-3 w-3 mr-1 text-fpl-gold" />
+                  {CHIP_LABELS[c.name] || c.name} — GW{c.event}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Transfers */}
       {recentGws.length > 0 && (

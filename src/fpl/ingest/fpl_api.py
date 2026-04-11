@@ -86,6 +86,16 @@ async def fetch_entry_picks(
     return response.json()  # type: ignore[no-any-return]
 
 
+async def fetch_entry_history(
+    client: httpx.AsyncClient, settings: Settings, team_id: int
+) -> dict[str, Any]:
+    """Fetch entry history including chips used."""
+    url = f"{settings.fpl_base_url}/entry/{team_id}/history/"
+    response = await client.get(url)
+    response.raise_for_status()
+    return response.json()  # type: ignore[no-any-return]
+
+
 def upsert_my_team(
     session: Session,
     team_id: int,

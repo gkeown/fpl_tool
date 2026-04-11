@@ -157,7 +157,11 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            from fpl.ingest.fpl_api import fetch_entry, fetch_entry_picks
+            from fpl.ingest.fpl_api import (
+                fetch_entry,
+                fetch_entry_history,
+                fetch_entry_picks,
+            )
             from fpl.ingest.leagues import fetch_entry_transfers
 
             entry = await fetch_entry(client, settings, entry_id)
@@ -166,6 +170,9 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                 client, settings, entry_id, current_gw
             )
             transfers = await fetch_entry_transfers(
+                client, settings, entry_id
+            )
+            history = await fetch_entry_history(
                 client, settings, entry_id
             )
     except Exception as exc:
@@ -316,6 +323,8 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             1, 2 - entry_history.get("event_transfers", 0)
         ),
         "transfers_made": entry_history.get("event_transfers", 0),
+        "active_chip": picks.get("active_chip"),
+        "chips": history.get("chips", []),
         "players": players_out,
         "transfers": transfers_out,
     }

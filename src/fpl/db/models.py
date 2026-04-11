@@ -302,6 +302,8 @@ class MyAccount(Base):
     total_transfers: Mapped[int]
     free_transfers: Mapped[int]
     gameweek_points: Mapped[int]
+    active_chip: Mapped[str | None] = mapped_column(default=None)
+    chips_json: Mapped[str | None] = mapped_column(default=None)
     fetched_at: Mapped[str]
 
 

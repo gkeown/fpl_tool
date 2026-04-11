@@ -105,6 +105,13 @@ def get_team() -> dict[str, Any]:
                 }
             )
 
+        import json
+
+        chips: list[dict[str, Any]] = []
+        if account and account.chips_json:
+            with contextlib.suppress(json.JSONDecodeError):
+                chips = json.loads(account.chips_json)
+
         return {
             "gameweek": current_gw,
             "gameweek_points": account.gameweek_points if account else 0,
@@ -112,6 +119,8 @@ def get_team() -> dict[str, Any]:
             "free_transfers": account.free_transfers if account else 1,
             "overall_points": account.overall_points if account else 0,
             "overall_rank": account.overall_rank if account else 0,
+            "active_chip": account.active_chip if account else None,
+            "chips": chips,
             "players": players_out,
         }
 

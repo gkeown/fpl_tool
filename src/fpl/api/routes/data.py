@@ -136,8 +136,15 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
             raise ValueError("No team loaded — load one via Settings first")
         team_id = account.fpl_team_id
 
+        import json
+
         from fpl.config import get_settings
-        from fpl.ingest.fpl_api import fetch_entry, fetch_entry_picks, upsert_my_team
+        from fpl.ingest.fpl_api import (
+            fetch_entry,
+            fetch_entry_history,
+            fetch_entry_picks,
+            upsert_my_team,
+        )
 
         started = _now_utc()
         settings = get_settings()
@@ -147,9 +154,20 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
         ) as client:
             entry = await fetch_entry(client, settings, team_id)
             current_gw = entry.get("current_event", 1)
-            picks = await fetch_entry_picks(client, settings, team_id, current_gw)
+            picks = await fetch_entry_picks(
+                client, settings, team_id, current_gw
+            )
+            history = await fetch_entry_history(
+                client, settings, team_id
+            )
             with get_session() as session:
                 count = upsert_my_team(session, team_id, entry, picks)
+                # Store chips + active chip
+                account = session.get(MyAccount, 1)
+                if account:
+                    chips = history.get("chips", [])
+                    account.chips_json = json.dumps(chips)
+                    account.active_chip = picks.get("active_chip")
                 session.add(
                     IngestLog(
                         source="team",

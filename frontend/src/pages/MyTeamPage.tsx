@@ -9,7 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RotateCw, AlertTriangle } from "lucide-react";
+import { RotateCw, AlertTriangle, Zap } from "lucide-react";
+
+const CHIP_LABELS: Record<string, string> = {
+  wildcard: "Wildcard",
+  freehit: "Free Hit",
+  bboost: "Bench Boost",
+  "3xc": "Triple Captain",
+  manager: "Assistant Manager",
+};
 
 function PlayerTable({ players, title, dimmed }: { players: any[]; title: string; dimmed?: boolean }) {
   return (
@@ -85,6 +93,7 @@ export default function MyTeamPage() {
 
   const starters = teamData?.players?.filter((p: any) => p.is_starter) ?? [];
   const bench = teamData?.players?.filter((p: any) => !p.is_starter) ?? [];
+  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0), 0);
 
   if (team.isLoading) {
     return (
@@ -124,10 +133,17 @@ export default function MyTeamPage() {
         <div className="flex flex-wrap gap-2 mb-4">
           <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">GW{teamData.gameweek}</Badge>
           <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">GW Pts: {teamData.gameweek_points ?? 0}</Badge>
+          <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30">XI Live: {xiTotal}</Badge>
           <Badge variant="outline">{teamData.overall_points?.toLocaleString()} pts</Badge>
           <Badge variant="outline">Rank: {teamData.overall_rank?.toLocaleString()}</Badge>
           <Badge variant="outline">Bank: {'\u00A3'}{(teamData.bank || 0).toFixed(1)}m</Badge>
           <Badge variant="outline">Free Transfers: {teamData.free_transfers}</Badge>
+          {teamData.active_chip && (
+            <Badge className="bg-fpl-gold/15 text-fpl-gold border border-fpl-gold/30">
+              <Zap className="h-3 w-3 mr-1" />
+              {CHIP_LABELS[teamData.active_chip] || teamData.active_chip} Active
+            </Badge>
+          )}
         </div>
       )}
 
@@ -155,6 +171,26 @@ export default function MyTeamPage() {
             </Alert>
           ))}
         </div>
+      )}
+
+      {teamData?.chips && teamData.chips.length > 0 && (
+        <Card className="card-stripe mt-4">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-sans font-semibold uppercase tracking-widest text-muted-foreground">
+              Chips Used
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="flex flex-wrap gap-2">
+              {teamData.chips.map((c: any, i: number) => (
+                <Badge key={i} variant="outline" className="text-xs">
+                  <Zap className="h-3 w-3 mr-1 text-fpl-gold" />
+                  {CHIP_LABELS[c.name] || c.name} — GW{c.event}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
