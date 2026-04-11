@@ -312,7 +312,7 @@ export interface MatchScore {
 }
 
 export interface LeagueScores {
-  id: number;
+  id: string;
   name: string;
   country: string;
   matches: MatchScore[];

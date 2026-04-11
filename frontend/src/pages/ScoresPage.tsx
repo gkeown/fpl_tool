@@ -9,13 +9,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw, Circle } from "lucide-react";
 
-const LEAGUE_ORDER = [39, 135, 140, 78, 61];
-const LEAGUE_SHORT: Record<number, string> = {
-  39: "PL",
-  135: "Serie A",
-  140: "La Liga",
-  78: "Bundesliga",
-  61: "Ligue 1",
+const LEAGUE_ORDER = ["eng.1", "ita.1", "esp.1", "ger.1", "fra.1"];
+const LEAGUE_SHORT: Record<string, string> = {
+  "eng.1": "PL",
+  "ita.1": "Serie A",
+  "esp.1": "La Liga",
+  "ger.1": "Bundesliga",
+  "fra.1": "Ligue 1",
 };
 
 function StatusBadge({ status, elapsed }: { status: string; elapsed: number | null }) {
