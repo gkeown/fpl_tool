@@ -12,6 +12,7 @@ from fpl.cli.formatters import position_str
 from fpl.config import get_settings
 from fpl.db.engine import get_session
 from fpl.db.models import (
+    Fixture,
     MyAccount,
     MyTeamPlayer,
     Player,
@@ -63,37 +64,46 @@ async def get_team() -> dict[str, Any]:
         current_gw = get_current_gameweek(session)
         account: MyAccount | None = session.get(MyAccount, 1)
 
-        player_ids = [player.fpl_id for _mtp, player, _ in rows]
-        proj_rows: list[PlayerProjection] = (
-            session.query(PlayerProjection)
-            .filter(PlayerProjection.player_id.in_(player_ids))
+        # Build opponent lookup from current GW fixtures
+        all_teams = {t.fpl_id: t.short_name for t in session.query(Team).all()}
+        gw_fixtures: list[Fixture] = (
+            session.query(Fixture)
+            .filter(Fixture.gameweek == current_gw)
             .all()
         )
-        proj_lookup: dict[int, float] = {p.player_id: p.gw1_pts for p in proj_rows}
-
-        ep_lookup: dict[int, float] = {}
-        for _mtp, player, _ in rows:
-            if player.fpl_id not in proj_lookup:
-                ep_val = 0.0
-                if player.ep_next:
-                    with contextlib.suppress(ValueError):
-                        ep_val = float(player.ep_next)
-                ep_lookup[player.fpl_id] = ep_val
+        # team_id -> (opponent_short_name, is_home)
+        opponent_lookup: dict[int, tuple[str, bool]] = {}
+        for fix in gw_fixtures:
+            opponent_lookup[fix.team_h] = (
+                all_teams.get(fix.team_a, "?"),
+                True,
+            )
+            opponent_lookup[fix.team_a] = (
+                all_teams.get(fix.team_h, "?"),
+                False,
+            )
 
         # Snapshot DB data while session is open
         db_players: list[dict[str, Any]] = []
         for mtp, player, tm in rows:
+            opp = opponent_lookup.get(player.team_id)
             db_players.append(
                 {
                     "fpl_id": player.fpl_id,
                     "web_name": player.web_name,
                     "team_short": tm.short_name,
+                    "team_id": player.team_id,
                     "element_type": player.element_type,
                     "now_cost": player.now_cost,
                     "selling_price": mtp.selling_price,
                     "form": player.form,
                     "event_points": player.event_points or 0,
                     "defcon": player.defensive_contribution,
+                    "opponent": (
+                        f"{opp[0]} (H)" if opp and opp[1]
+                        else f"{opp[0]} (A)" if opp
+                        else "-"
+                    ),
                     "status": player.status,
                     "news": player.news,
                     "position": mtp.position,
@@ -119,9 +129,6 @@ async def get_team() -> dict[str, Any]:
     # Fetch live GW data (outside session — async call)
     live_data = await _fetch_live_gw(current_gw) if current_gw else {}
 
-    def _xpts(pid: int) -> float:
-        return proj_lookup.get(pid, ep_lookup.get(pid, 0.0))
-
     players_out: list[dict[str, Any]] = []
     for p in db_players:
         pid = p["fpl_id"]
@@ -141,7 +148,7 @@ async def get_team() -> dict[str, Any]:
                 "cost": float(p["now_cost"]) / 10,
                 "selling_price": float(p["selling_price"]) / 10,
                 "form": float(p["form"]),
-                "xpts_next_gw": round(_xpts(pid), 2),
+                "opponent": p["opponent"],
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 import fpl.api.routes.team as team_mod
 from fpl.db.models import (
+    Fixture,
     Gameweek,
     MyAccount,
     MyTeamPlayer,
@@ -41,10 +42,23 @@ def _seed_team_data(session: Session) -> None:
         strength_defence_home=1260, strength_defence_away=1240,
         updated_at=now,
     ))
+    session.add(Team(
+        fpl_id=14, code=43, name="Manchester City", short_name="MCI",
+        strength=5, strength_attack_home=1350, strength_attack_away=1310,
+        strength_defence_home=1300, strength_defence_away=1280,
+        updated_at=now,
+    ))
 
     session.add(Gameweek(
         id=29, name="Gameweek 29", deadline_time="2025-03-14T11:30:00Z",
         finished=False, is_current=True, is_next=False, is_previous=False,
+        updated_at=now,
+    ))
+
+    # Arsenal (H) vs Man City (A) in GW29
+    session.add(Fixture(
+        fpl_id=300, gameweek=29, kickoff_time="2025-03-15T15:00:00Z",
+        team_h=1, team_a=14, team_h_difficulty=4, team_a_difficulty=3,
         updated_at=now,
     ))
 
@@ -174,7 +188,7 @@ async def test_get_team_player_fields(
     player = data["players"][0]
     expected_keys = {
         "id", "web_name", "team", "position", "cost", "selling_price",
-        "form", "xpts_next_gw", "event_points", "gw_points", "status",
+        "form", "opponent", "event_points", "gw_points", "status",
         "news", "is_starter", "squad_position", "is_captain",
         "is_vice_captain", "multiplier",
     }

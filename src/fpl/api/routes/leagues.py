@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,10 +11,10 @@ from fpl.cli.formatters import position_str
 from fpl.config import get_settings
 from fpl.db.engine import get_session
 from fpl.db.models import (
+    Fixture,
     League,
     LeagueEntry,
     Player,
-    PlayerProjection,
     Team,
 )
 
@@ -198,15 +197,26 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             p.fpl_id: (p, t) for p, t in player_rows
         }
 
-        # Projections
-        proj_rows: list[PlayerProjection] = (
-            session.query(PlayerProjection)
-            .filter(PlayerProjection.player_id.in_(player_ids))
+        # Build opponent lookup from current GW fixtures
+        all_teams = {
+            t.fpl_id: t.short_name
+            for t in session.query(Team).all()
+        }
+        gw_fixtures: list[Fixture] = (
+            session.query(Fixture)
+            .filter(Fixture.gameweek == current_gw_db)
             .all()
         )
-        proj_lookup: dict[int, float] = {
-            p.player_id: p.gw1_pts for p in proj_rows
-        }
+        opponent_lookup: dict[int, tuple[str, bool]] = {}
+        for fix in gw_fixtures:
+            opponent_lookup[fix.team_h] = (
+                all_teams.get(fix.team_a, "?"),
+                True,
+            )
+            opponent_lookup[fix.team_a] = (
+                all_teams.get(fix.team_h, "?"),
+                False,
+            )
 
         # Resolve transfer player names
         all_transfer_pids: set[int] = set()
@@ -229,14 +239,6 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
 
         live_data = await _fetch_live_gw(current_gw_db)
 
-        # Build ep_next fallback lookup (while session is open)
-        ep_lookup: dict[int, float] = {}
-        for pid_val in player_ids:
-            pd = player_map.get(pid_val)
-            if pd and pid_val not in proj_lookup and pd[0].ep_next:
-                with contextlib.suppress(ValueError):
-                    ep_lookup[pid_val] = float(pd[0].ep_next)
-
         # Build player dicts while session is still open
         players_out: list[dict[str, Any]] = []
         for pick in pick_list:
@@ -246,15 +248,18 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                 continue
             player, tm = pd
             multiplier = pick.get("multiplier", 1)
-            xpts = proj_lookup.get(
-                pid, ep_lookup.get(pid, 0.0)
-            )
             live_stats = live_data.get(pid, {})
             live_pts = live_stats.get("total_points")
             event_pts = (
                 live_pts
                 if live_pts is not None
                 else (player.event_points or 0)
+            )
+            opp = opponent_lookup.get(player.team_id)
+            opp_str = (
+                f"{opp[0]} (H)" if opp and opp[1]
+                else f"{opp[0]} (A)" if opp
+                else "-"
             )
 
             players_out.append(
@@ -265,7 +270,7 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "position": position_str(player.element_type),
                     "cost": float(player.now_cost) / 10,
                     "form": float(player.form),
-                    "xpts_next_gw": round(xpts, 2),
+                    "opponent": opp_str,
                     "event_points": event_pts,
                     "gw_points": event_pts * multiplier,
                     "gw_bonus": live_stats.get("bonus", 0),
