@@ -401,6 +401,7 @@ export const api = {
     const q = date ? `?date=${date}` : '';
     return get<ScoresResponse>(`/scores/today${q}`);
   },
+  getStandings: () => get<unknown>('/scores/standings'),
 
   // Data management
   getDataStatus: () => get<DataSource[]>('/data/status'),

@@ -90,15 +90,19 @@ async def _auto_refresh() -> None:
 
 
 async def _score_refresh() -> None:
-    """Refresh live score cache if within a score window."""
+    """Refresh live score and standings caches if within a score window."""
     if not _in_score_window():
         return
 
     try:
-        from fpl.api.routes.scores import refresh_score_cache
+        from fpl.api.routes.scores import (
+            refresh_score_cache,
+            refresh_standings_cache,
+        )
 
         await refresh_score_cache()
-        logger.info("Score cache refreshed")
+        await refresh_standings_cache()
+        logger.info("Score + standings caches refreshed")
     except Exception:
         logger.exception("Score cache refresh failed")
 

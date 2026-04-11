@@ -18,11 +18,14 @@ from fpl.config import get_settings
 
 router = APIRouter()
 
-# In-memory score cache, updated by the scheduler
+# In-memory caches, updated by the scheduler
 _score_cache: dict[str, Any] = {}
 _cache_updated_at: str = ""
+_standings_cache: dict[str, Any] = {}
+_standings_cache_updated_at: str = ""
 
 _ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
+_ESPN_STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports/soccer"
 
 _LEAGUES = [
     {"slug": "eng.1", "name": "Premier League", "country": "England"},
@@ -332,3 +335,124 @@ async def today_scores(
         _cache_updated_at = datetime.now(UTC).isoformat()
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Standings
+# ---------------------------------------------------------------------------
+
+_STANDINGS_LEAGUES = [
+    {"slug": "eng.1", "name": "Premier League", "country": "England"},
+    {"slug": "eng.2", "name": "Championship", "country": "England"},
+    {"slug": "ita.1", "name": "Serie A", "country": "Italy"},
+    {"slug": "esp.1", "name": "La Liga", "country": "Spain"},
+    {"slug": "ger.1", "name": "Bundesliga", "country": "Germany"},
+    {"slug": "fra.1", "name": "Ligue 1", "country": "France"},
+]
+
+
+async def _fetch_espn_standings(
+    client: httpx.AsyncClient, slug: str
+) -> list[dict[str, Any]]:
+    """Fetch standings for a league from ESPN."""
+    url = f"{_ESPN_STANDINGS_BASE}/{slug}/standings"
+    resp = await client.get(url)
+    resp.raise_for_status()
+    data = resp.json()
+    children = data.get("children", [])
+    if not children:
+        return []
+    entries = (
+        children[0]
+        .get("standings", {})
+        .get("entries", [])
+    )
+    return entries  # type: ignore[no-any-return]
+
+
+def _get_stat(
+    entry: dict[str, Any], stat_name: str
+) -> int:
+    """Extract a stat value from an ESPN standings entry."""
+    for s in entry.get("stats", []):
+        if s.get("name") == stat_name:
+            return int(s.get("value", 0))
+    return 0
+
+
+def _parse_standing(entry: dict[str, Any]) -> dict[str, Any]:
+    """Parse an ESPN standings entry into our shape."""
+    team_info = entry.get("team", {})
+    note = entry.get("note", {})
+    return {
+        "position": _get_stat(entry, "rank"),
+        "team": team_info.get("displayName", ""),
+        "team_short": team_info.get("abbreviation", ""),
+        "played": _get_stat(entry, "gamesPlayed"),
+        "won": _get_stat(entry, "wins"),
+        "drawn": _get_stat(entry, "ties"),
+        "lost": _get_stat(entry, "losses"),
+        "gf": _get_stat(entry, "pointsFor"),
+        "ga": _get_stat(entry, "pointsAgainst"),
+        "gd": _get_stat(entry, "pointDifferential"),
+        "points": _get_stat(entry, "points"),
+        "zone": note.get("description", ""),
+    }
+
+
+async def fetch_standings() -> dict[str, Any]:
+    """Fetch standings for all leagues from ESPN."""
+    leagues_out: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        for league_info in _STANDINGS_LEAGUES:
+            try:
+                entries = await _fetch_espn_standings(
+                    client, league_info["slug"]
+                )
+            except Exception:
+                continue
+
+            table = [_parse_standing(e) for e in entries]
+            table.sort(key=lambda t: t["position"])
+
+            if table:
+                leagues_out.append(
+                    {
+                        "id": league_info["slug"],
+                        "name": league_info["name"],
+                        "country": league_info["country"],
+                        "table": table,
+                    }
+                )
+
+    return {"leagues": leagues_out}
+
+
+async def refresh_standings_cache() -> None:
+    """Refresh the in-memory standings cache."""
+    global _standings_cache, _standings_cache_updated_at
+    result = await fetch_standings()
+    _standings_cache = result
+    _standings_cache_updated_at = datetime.now(UTC).isoformat()
+
+
+@router.get("/standings")
+async def get_standings(force: bool = False) -> dict[str, Any]:
+    """Return league standings for all major leagues.
+
+    Serves from cache if available.
+    """
+    global _standings_cache, _standings_cache_updated_at
+
+    if not force and _standings_cache:
+        return {
+            **_standings_cache,
+            "cached_at": _standings_cache_updated_at,
+        }
+
+    result = await fetch_standings()
+    _standings_cache = result
+    _standings_cache_updated_at = datetime.now(UTC).isoformat()
+
+    return {**result, "cached_at": _standings_cache_updated_at}
