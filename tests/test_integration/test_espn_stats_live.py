@@ -126,15 +126,71 @@ async def test_athlete_detail_has_stats() -> None:
     assert len(stats) > 0
 
     stat_names = {s["name"] for s in stats}
-    assert "totalGoals" in stat_names or "starts-subIns" in stat_names
+
+    # Verify all stat fields our code depends on exist
+    expected_stats = {
+        "starts-subIns",
+        "totalGoals",
+        "goalAssists",
+        "totalShots",
+    }
+    missing = expected_stats - stat_names
+    assert not missing, f"Missing expected stats: {missing}"
 
 
-async def test_athlete_detail_has_profile_info() -> None:
-    """Athlete detail should include position, team, nationality."""
+async def test_athlete_stat_values_are_numeric() -> None:
+    """Each stat should have a numeric value field."""
 
     async def _fetch() -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Use a known ESPN ID for Haaland
+            search_resp = await client.get(
+                ESPN_SEARCH,
+                params={
+                    "query": "Bukayo Saka",
+                    "type": "player",
+                    "sport": "soccer",
+                    "limit": "3",
+                },
+            )
+            search_resp.raise_for_status()
+            items = search_resp.json().get("items", [])
+            saka = next(
+                (
+                    i
+                    for i in items
+                    if "Bukayo" in i.get("displayName", "")
+                ),
+                None,
+            )
+            assert saka is not None
+
+            resp = await client.get(
+                f"{ESPN_ATHLETE}/eng.1/athletes/{saka['id']}"
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    data = await _fetch()
+    stats = (
+        data.get("athlete", {})
+        .get("statsSummary", {})
+        .get("statistics", [])
+    )
+
+    for s in stats:
+        assert "name" in s, "Stat missing 'name' field"
+        assert "value" in s, f"Stat {s['name']} missing 'value'"
+        assert isinstance(
+            s["value"], (int, float)
+        ), f"Stat {s['name']} value is not numeric: {s['value']}"
+        assert "displayValue" in s, f"Stat {s['name']} missing 'displayValue'"
+
+
+async def test_athlete_detail_has_profile_fields() -> None:
+    """Athlete detail should include all profile fields our code reads."""
+
+    async def _fetch() -> dict[str, Any]:
+        async with httpx.AsyncClient(timeout=15) as client:
             search_resp = await client.get(
                 ESPN_SEARCH,
                 params={
@@ -164,8 +220,16 @@ async def test_athlete_detail_has_profile_info() -> None:
 
     data = await _fetch()
     athlete = data.get("athlete", {})
-    assert athlete.get("position", {}).get("displayName")
-    assert athlete.get("team", {}).get("displayName")
+
+    # Profile fields our code depends on
+    assert athlete.get("displayName"), "Missing displayName"
+    assert athlete.get("position", {}).get("displayName"), "Missing position"
+    assert athlete.get("team", {}).get("displayName"), "Missing team"
+
+    # statsSummary must exist with displayName (used as season label)
+    summary = athlete.get("statsSummary", {})
+    assert summary.get("displayName"), "Missing statsSummary.displayName"
+    assert "statistics" in summary, "Missing statsSummary.statistics"
 
 
 async def test_search_across_leagues() -> None:
