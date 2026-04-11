@@ -403,6 +403,14 @@ export const api = {
   },
   getStandings: () => get<unknown>('/scores/standings'),
 
+  // Player Stats
+  searchPlayerStats: (q: string) => get<unknown[]>(`/stats/search?q=${encodeURIComponent(q)}`),
+  getPlayerStats: (id: number, season?: number) => {
+    const q = season ? `?season=${season}` : '';
+    return get<unknown>(`/stats/player/${id}${q}`);
+  },
+  getPlayerXg: (id: number) => get<unknown>(`/stats/player/${id}/xg`),
+
   // Data management
   getDataStatus: () => get<DataSource[]>('/data/status'),
   refreshAll: (source = 'all', force = false) =>

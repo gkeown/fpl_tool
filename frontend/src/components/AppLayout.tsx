@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Users, UserSearch, Calendar, ArrowLeftRight,
-  TrendingUp, Settings, Trophy, PanelLeft, Users2, Radio, TableProperties,
+  TrendingUp, Settings, Trophy, PanelLeft, Users2, Radio, TableProperties, BarChart3,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarHeader, SidebarFooter,
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { to: "/leagues", icon: Users2, label: "Leagues" },
   { to: "/scores", icon: Radio, label: "Scores" },
   { to: "/tables", icon: TableProperties, label: "Tables" },
+  { to: "/stats", icon: BarChart3, label: "Stats" },
   { to: "/players", icon: UserSearch, label: "Players" },
   { to: "/fixtures", icon: Calendar, label: "Fixtures" },
   { to: "/transfers", icon: ArrowLeftRight, label: "Transfers" },
