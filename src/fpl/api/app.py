@@ -25,19 +25,30 @@ async def _auto_setup() -> None:
     import logging
 
     from fpl.config import get_settings
+    from fpl.db.engine import get_session
+    from fpl.db.models import League, MyAccount
 
     logger = logging.getLogger(__name__)
     settings = get_settings()
 
     # Auto-load team if FPL_ID is set and no team is stored
     if settings.id:
-        from fpl.db.engine import get_session
-        from fpl.db.models import MyAccount
-
+        needs_load = False
         with get_session() as session:
             account: MyAccount | None = session.get(MyAccount, 1)
+            if account is None or account.fpl_team_id != settings.id:
+                needs_load = True
 
-        if account is None or account.fpl_team_id != settings.id:
+        if needs_load:
+            # Refresh core data first so player table is populated
+            logger.info("Running initial data refresh...")
+            try:
+                from fpl.api.routes.data import refresh
+
+                await refresh(source="fpl", force=True)
+            except Exception:
+                logger.exception("Initial data refresh failed")
+
             logger.info("Auto-loading team %d from FPL_ID", settings.id)
             try:
                 from fpl.api.routes.team import login
@@ -48,9 +59,6 @@ async def _auto_setup() -> None:
 
     # Auto-subscribe leagues from FPL_LEAGUE_IDS
     if settings.league_ids.strip():
-        from fpl.db.engine import get_session
-        from fpl.db.models import League
-
         league_id_list = [
             int(x.strip())
             for x in settings.league_ids.split(",")
@@ -59,14 +67,17 @@ async def _auto_setup() -> None:
         for lid in league_id_list:
             with get_session() as session:
                 existing: League | None = session.get(League, lid)
-            if existing is None:
+                already_exists = existing is not None
+            if not already_exists:
                 logger.info("Auto-subscribing to league %d", lid)
                 try:
                     from fpl.api.routes.leagues import add_league
 
                     await add_league(lid)
                 except Exception:
-                    logger.exception("Auto-subscribe league %d failed", lid)
+                    logger.exception(
+                        "Auto-subscribe league %d failed", lid
+                    )
 
 
 @asynccontextmanager

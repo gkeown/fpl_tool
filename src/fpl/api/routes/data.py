@@ -132,9 +132,9 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
     async def _run_team() -> None:
         with get_session() as session:
             account: MyAccount | None = session.get(MyAccount, 1)
-        if account is None:
+            team_id = account.fpl_team_id if account else None
+        if team_id is None:
             raise ValueError("No team loaded — load one via Settings first")
-        team_id = account.fpl_team_id
 
         import json
 
