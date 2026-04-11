@@ -129,6 +129,7 @@ async def get_team() -> dict[str, Any]:
         live_stats = live_data.get(pid, {})
         live_pts = live_stats.get("total_points")
         live_bonus = live_stats.get("bonus", 0)
+        live_defcon = live_stats.get("defensive_contribution", 0)
         event_pts = live_pts if live_pts is not None else p["event_points"]
 
         players_out.append(
@@ -144,7 +145,7 @@ async def get_team() -> dict[str, Any]:
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,
-                "defcon": p["defcon"],
+                "defcon": live_defcon,
                 "status": p["status"],
                 "news": p["news"],
                 "is_starter": p["position"] <= 11,

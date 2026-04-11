@@ -15,7 +15,6 @@ from fpl.db.models import (
     League,
     LeagueEntry,
     Player,
-    PlayerGameweekStats,
     PlayerProjection,
     Team,
 )
@@ -209,21 +208,6 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             p.player_id: p.gw1_pts for p in proj_rows
         }
 
-        # Bonus for current GW
-        bonus_rows: list[PlayerGameweekStats] = (
-            session.query(PlayerGameweekStats)
-            .filter(
-                PlayerGameweekStats.player_id.in_(player_ids),
-                PlayerGameweekStats.gameweek == current_gw_db,
-            )
-            .all()
-        )
-        bonus_lookup: dict[int, int] = {}
-        for br in bonus_rows:
-            bonus_lookup[br.player_id] = (
-                bonus_lookup.get(br.player_id, 0) + br.bonus
-            )
-
         # Resolve transfer player names
         all_transfer_pids: set[int] = set()
         for t in transfers:
@@ -239,6 +223,11 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
         name_lookup: dict[int, str] = {
             p.fpl_id: p.web_name for p in transfer_players
         }
+
+        # Fetch live GW data for bonus + defcon
+        from fpl.api.routes.team import _fetch_live_gw
+
+        live_data = await _fetch_live_gw(current_gw_db)
 
         # Build ep_next fallback lookup (while session is open)
         ep_lookup: dict[int, float] = {}
@@ -256,10 +245,16 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             if not pd:
                 continue
             player, tm = pd
-            event_pts = player.event_points or 0
             multiplier = pick.get("multiplier", 1)
             xpts = proj_lookup.get(
                 pid, ep_lookup.get(pid, 0.0)
+            )
+            live_stats = live_data.get(pid, {})
+            live_pts = live_stats.get("total_points")
+            event_pts = (
+                live_pts
+                if live_pts is not None
+                else (player.event_points or 0)
             )
 
             players_out.append(
@@ -273,8 +268,10 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "xpts_next_gw": round(xpts, 2),
                     "event_points": event_pts,
                     "gw_points": event_pts * multiplier,
-                    "gw_bonus": bonus_lookup.get(pid, 0),
-                    "defcon": player.defensive_contribution,
+                    "gw_bonus": live_stats.get("bonus", 0),
+                    "defcon": live_stats.get(
+                        "defensive_contribution", 0
+                    ),
                     "status": player.status,
                     "news": player.news,
                     "is_starter": pick["position"] <= 11,
