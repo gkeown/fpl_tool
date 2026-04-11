@@ -65,6 +65,7 @@ def get_team() -> dict[str, Any]:
 
         players_out: list[dict[str, Any]] = []
         for mtp, player, tm in rows:
+            event_pts = player.event_points or 0
             players_out.append(
                 {
                     "id": player.fpl_id,
@@ -75,6 +76,8 @@ def get_team() -> dict[str, Any]:
                     "selling_price": float(mtp.selling_price) / 10,
                     "form": float(player.form),
                     "xpts_next_gw": round(_xpts(player.fpl_id), 2),
+                    "event_points": event_pts,
+                    "gw_points": event_pts * mtp.multiplier,
                     "status": player.status,
                     "news": player.news,
                     "is_starter": mtp.position <= 11,
@@ -87,6 +90,7 @@ def get_team() -> dict[str, Any]:
 
         return {
             "gameweek": current_gw,
+            "gameweek_points": account.gameweek_points if account else 0,
             "bank": float(account.bank) / 10 if account else 0.0,
             "free_transfers": account.free_transfers if account else 1,
             "overall_points": account.overall_points if account else 0,

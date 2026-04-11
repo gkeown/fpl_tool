@@ -74,7 +74,8 @@
       "expected_goals_conceded": "18.50",
       "penalties_order": 1,
       "corners_and_indirect_freekicks_order": 2,
-      "direct_freekicks_order": null
+      "direct_freekicks_order": null,
+      "event_points": 9
     },
     {
       "id": 427,
@@ -114,7 +115,8 @@
       "expected_goals_conceded": "15.20",
       "penalties_order": 1,
       "corners_and_indirect_freekicks_order": null,
-      "direct_freekicks_order": null
+      "direct_freekicks_order": null,
+      "event_points": 15
     },
     {
       "id": 3,
@@ -154,7 +156,8 @@
       "expected_goals_conceded": "28.40",
       "penalties_order": null,
       "corners_and_indirect_freekicks_order": null,
-      "direct_freekicks_order": null
+      "direct_freekicks_order": null,
+      "event_points": 6
     }
   ],
   "events": [

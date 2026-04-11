@@ -137,6 +137,47 @@ def test_upsert_players_goalkeeper_fields(
     assert raya.goals_scored == 0
 
 
+def test_upsert_players_captures_event_points(
+    db_session: Session, bootstrap_data: dict
+) -> None:
+    """event_points from bootstrap should be stored on the Player model."""
+    upsert_teams(db_session, bootstrap_data["teams"])
+    db_session.commit()
+    upsert_players(db_session, bootstrap_data["elements"])
+    db_session.commit()
+
+    saka = db_session.get(Player, 301)
+    assert saka is not None
+    assert saka.event_points == 9
+
+    haaland = db_session.get(Player, 427)
+    assert haaland is not None
+    assert haaland.event_points == 15
+
+    raya = db_session.get(Player, 3)
+    assert raya is not None
+    assert raya.event_points == 6
+
+
+def test_upsert_players_defaults_event_points_when_missing(
+    db_session: Session, bootstrap_data: dict
+) -> None:
+    """event_points should default to 0 if not present in API response."""
+    upsert_teams(db_session, bootstrap_data["teams"])
+    db_session.commit()
+
+    # Remove event_points from one player
+    elements = [dict(e) for e in bootstrap_data["elements"]]
+    del elements[0]["event_points"]
+
+    upsert_players(db_session, elements)
+    db_session.commit()
+
+    saka = db_session.get(Player, 301)
+    assert saka is not None
+    assert saka.event_points == 0
+
+
 def test_upsert_players_updates_on_conflict(
     db_session: Session, bootstrap_data: dict
 ) -> None:

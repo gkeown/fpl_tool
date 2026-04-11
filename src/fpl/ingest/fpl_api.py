@@ -246,6 +246,7 @@ def upsert_players(session: Session, elements_data: list[dict[str, Any]]) -> int
             "recoveries": e.get("recoveries", 0),
             "tackles": e.get("tackles", 0),
             "defensive_contribution": e.get("defensive_contribution", 0),
+            "event_points": e.get("event_points", 0),
             "updated_at": now,
         }
         for e in elements_data

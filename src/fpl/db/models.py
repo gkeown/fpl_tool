@@ -91,6 +91,7 @@ class Player(Base):
     recoveries: Mapped[int] = mapped_column(default=0)
     tackles: Mapped[int] = mapped_column(default=0)
     defensive_contribution: Mapped[int] = mapped_column(default=0)
+    event_points: Mapped[int] = mapped_column(default=0)
     updated_at: Mapped[str]
 
     team: Mapped[Team] = relationship(back_populates="players")
