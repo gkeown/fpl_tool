@@ -20,9 +20,59 @@ _FRONTEND_DIR = Path(
 )
 
 
+async def _auto_setup() -> None:
+    """Load team + leagues from env config if not already in DB."""
+    import logging
+
+    from fpl.config import get_settings
+
+    logger = logging.getLogger(__name__)
+    settings = get_settings()
+
+    # Auto-load team if FPL_ID is set and no team is stored
+    if settings.id:
+        from fpl.db.engine import get_session
+        from fpl.db.models import MyAccount
+
+        with get_session() as session:
+            account: MyAccount | None = session.get(MyAccount, 1)
+
+        if account is None or account.fpl_team_id != settings.id:
+            logger.info("Auto-loading team %d from FPL_ID", settings.id)
+            try:
+                from fpl.api.routes.team import login
+
+                await login(settings.id)
+            except Exception:
+                logger.exception("Auto-load team failed")
+
+    # Auto-subscribe leagues from FPL_LEAGUE_IDS
+    if settings.league_ids.strip():
+        from fpl.db.engine import get_session
+        from fpl.db.models import League
+
+        league_id_list = [
+            int(x.strip())
+            for x in settings.league_ids.split(",")
+            if x.strip().isdigit()
+        ]
+        for lid in league_id_list:
+            with get_session() as session:
+                existing: League | None = session.get(League, lid)
+            if existing is None:
+                logger.info("Auto-subscribing to league %d", lid)
+                try:
+                    from fpl.api.routes.leagues import add_league
+
+                    await add_league(lid)
+                except Exception:
+                    logger.exception("Auto-subscribe league %d failed", lid)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_db()
+    await _auto_setup()
     from fpl.scheduler import start_scheduler, stop_scheduler
 
     start_scheduler()
