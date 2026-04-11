@@ -15,6 +15,7 @@ from fpl.db.models import (
     MyAccount,
     MyTeamPlayer,
     Player,
+    PlayerGameweekStats,
     PlayerProjection,
     Team,
 )
@@ -51,6 +52,21 @@ def get_team() -> dict[str, Any]:
         )
         proj_lookup: dict[int, float] = {p.player_id: p.gw1_pts for p in proj_rows}
 
+        # Bonus points for current GW
+        bonus_rows: list[PlayerGameweekStats] = (
+            session.query(PlayerGameweekStats)
+            .filter(
+                PlayerGameweekStats.player_id.in_(player_ids),
+                PlayerGameweekStats.gameweek == current_gw,
+            )
+            .all()
+        )
+        bonus_lookup: dict[int, int] = {}
+        for br in bonus_rows:
+            bonus_lookup[br.player_id] = (
+                bonus_lookup.get(br.player_id, 0) + br.bonus
+            )
+
         ep_lookup: dict[int, float] = {}
         for _mtp, player, _ in rows:
             if player.fpl_id not in proj_lookup:
@@ -78,6 +94,7 @@ def get_team() -> dict[str, Any]:
                     "xpts_next_gw": round(_xpts(player.fpl_id), 2),
                     "event_points": event_pts,
                     "gw_points": event_pts * mtp.multiplier,
+                    "gw_bonus": bonus_lookup.get(player.fpl_id, 0),
                     "status": player.status,
                     "news": player.news,
                     "is_starter": mtp.position <= 11,

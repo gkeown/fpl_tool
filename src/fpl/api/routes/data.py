@@ -7,7 +7,7 @@ import httpx
 from fastapi import APIRouter
 
 from fpl.db.engine import get_session
-from fpl.db.models import IngestLog, MyAccount
+from fpl.db.models import IngestLog, League, MyAccount
 
 router = APIRouter()
 
@@ -16,7 +16,7 @@ def _now_utc() -> str:
     return datetime.now(UTC).isoformat()
 
 
-_SOURCES = ("fpl", "understat", "odds", "injuries", "projections", "team")
+_SOURCES = ("fpl", "understat", "odds", "injuries", "projections", "team", "leagues")
 
 
 def _last_success_age_secs(source: str, session: object) -> float | None:
@@ -160,6 +160,40 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
                     )
                 )
 
+    async def _run_leagues() -> None:
+        from fpl.config import get_settings as _get_settings
+        from fpl.ingest.leagues import fetch_league_standings, upsert_league
+
+        with get_session() as session:
+            leagues = session.query(League).all()
+            league_ids = [lg.league_id for lg in leagues]
+
+        if not league_ids:
+            return
+
+        started = _now_utc()
+        settings = _get_settings()
+        headers = {"User-Agent": settings.user_agent}
+        total = 0
+        async with httpx.AsyncClient(
+            timeout=settings.http_timeout, headers=headers
+        ) as client:
+            for lid in league_ids:
+                data = await fetch_league_standings(client, settings, lid)
+                with get_session() as session:
+                    total += upsert_league(session, lid, data)
+
+        with get_session() as session:
+            session.add(
+                IngestLog(
+                    source="leagues",
+                    status="success",
+                    records_upserted=total,
+                    started_at=started,
+                    finished_at=_now_utc(),
+                )
+            )
+
     _RUNNER_MAP = {
         "fpl": _run_fpl,
         "understat": _run_understat,
@@ -167,6 +201,7 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
         "injuries": _run_injuries,
         "projections": _run_projections,
         "team": _run_team,
+        "leagues": _run_leagues,
     }
 
     sources_to_run = list(_RUNNER_MAP.keys()) if source == "all" else [source]

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     fdr_lookback_weeks: int = 10
     http_timeout: int = 30
     http_max_concurrent: int = 5
+    auto_refresh: bool = True
 
 
 def get_settings() -> Settings:

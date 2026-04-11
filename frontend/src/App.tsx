@@ -9,6 +9,8 @@ import FixturesPage from "./pages/FixturesPage";
 import TransfersPage from "./pages/TransfersPage";
 import PricesPage from "./pages/PricesPage";
 import SettingsPage from "./pages/SettingsPage";
+import LeaguePage from "./pages/LeaguePage";
+import OpponentTeamPage from "./pages/OpponentTeamPage";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/transfers" element={<TransfersPage />} />
           <Route path="/prices" element={<PricesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/leagues" element={<LeaguePage />} />
+          <Route path="/leagues/:leagueId/team/:entryId" element={<OpponentTeamPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

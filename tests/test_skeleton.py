@@ -12,7 +12,7 @@ from fpl.types import IngestSource, PlayerStatus, Position
 
 
 def test_all_tables_created(db_session: Session) -> None:
-    """All 17 ORM tables should be created in the in-memory DB."""
+    """All ORM tables should be created in the in-memory DB."""
     table_names = set(Base.metadata.tables.keys())
     expected = {
         "teams",
@@ -33,6 +33,8 @@ def test_all_tables_created(db_session: Session) -> None:
         "betting_odds",
         "player_projections",
         "ingest_logs",
+        "leagues",
+        "league_entries",
     }
     assert expected == table_names
 

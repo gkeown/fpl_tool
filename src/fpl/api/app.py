@@ -23,7 +23,11 @@ _FRONTEND_DIR = Path(
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     init_db()
+    from fpl.scheduler import start_scheduler, stop_scheduler
+
+    start_scheduler()
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
@@ -43,6 +47,7 @@ from fpl.api.routes import (  # noqa: E402
     captain,
     data,
     fixtures,
+    leagues,
     players,
     predict,
     prices,
@@ -58,6 +63,7 @@ app.include_router(transfers.router, prefix="/api/transfers", tags=["transfers"]
 app.include_router(captain.router, prefix="/api/captain", tags=["captain"])
 app.include_router(prices.router, prefix="/api/prices", tags=["prices"])
 app.include_router(data.router, prefix="/api/data", tags=["data"])
+app.include_router(leagues.router, prefix="/api/leagues", tags=["leagues"])
 
 # Serve frontend static files if the build exists
 if _FRONTEND_DIR.is_dir():

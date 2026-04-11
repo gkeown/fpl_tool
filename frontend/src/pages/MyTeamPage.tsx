@@ -27,6 +27,7 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
               <TableHead className="h-8 px-3 text-xs text-right">Cost</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">Form</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">GW Pts</TableHead>
+              <TableHead className="h-8 px-3 text-xs text-right">Bonus</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">xPts GW</TableHead>
               <TableHead className="h-8 px-3 text-xs text-center">Status</TableHead>
             </TableRow>
@@ -54,6 +55,11 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
                   <span className={`font-semibold ${(p.gw_points || 0) >= 8 ? "text-fpl-green" : ""}`}>
                     {p.gw_points ?? 0}
+                  </span>
+                </TableCell>
+                <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
+                  <span className={(p.gw_bonus || 0) >= 3 ? "text-fpl-gold font-semibold" : ""}>
+                    {p.gw_bonus ?? 0}
                   </span>
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">{(p.xpts_next_gw || 0).toFixed(1)}</TableCell>

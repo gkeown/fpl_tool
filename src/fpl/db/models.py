@@ -425,6 +425,35 @@ class PlayerProjection(Base):
     player: Mapped[Player] = relationship(back_populates="projections")
 
 
+class League(Base):
+    __tablename__ = "leagues"
+
+    league_id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    fetched_at: Mapped[str]
+
+    entries: Mapped[list[LeagueEntry]] = relationship(
+        back_populates="league", cascade="all, delete-orphan"
+    )
+
+
+class LeagueEntry(Base):
+    __tablename__ = "league_entries"
+    __table_args__ = (UniqueConstraint("league_id", "entry_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    league_id: Mapped[int] = mapped_column(ForeignKey("leagues.league_id"))
+    entry_id: Mapped[int]
+    player_name: Mapped[str]
+    entry_name: Mapped[str]
+    rank: Mapped[int]
+    total: Mapped[int]
+    event_total: Mapped[int] = mapped_column(default=0)
+    fetched_at: Mapped[str]
+
+    league: Mapped[League] = relationship(back_populates="entries")
+
+
 class IngestLog(Base):
     __tablename__ = "ingest_logs"
 
