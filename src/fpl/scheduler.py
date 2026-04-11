@@ -12,7 +12,7 @@ match windows:
 from __future__ import annotations
 
 import logging
-from datetime import time
+from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import (
@@ -49,8 +49,6 @@ def _in_window(
     windows: list[tuple[int, time, time]],
 ) -> bool:
     """Check if current UK time falls within any of the given windows."""
-    from datetime import datetime
-
     now = datetime.now(_UK)
     day = now.weekday()
     current = now.time()
