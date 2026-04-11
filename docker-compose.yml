@@ -1,0 +1,16 @@
+services:
+  fpl:
+    build: .
+    ports:
+      - "3001:3001"
+    volumes:
+      - fpl-data:/app/data
+    env_file:
+      - .env
+    environment:
+      - FPL_DB_PATH=/app/data/fpl.db
+      - FPL_FRONTEND_DIR=/app/frontend/dist
+    restart: unless-stopped
+
+volumes:
+  fpl-data:

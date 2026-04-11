@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,7 +12,12 @@ from fastapi.staticfiles import StaticFiles
 
 from fpl.db.engine import init_db
 
-_FRONTEND_DIR = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+_FRONTEND_DIR = Path(
+    os.environ.get(
+        "FPL_FRONTEND_DIR",
+        str(Path(__file__).resolve().parents[3] / "frontend" / "dist"),
+    )
+)
 
 
 @asynccontextmanager

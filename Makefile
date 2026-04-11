@@ -1,4 +1,24 @@
-.PHONY: install dev dev-api dev-frontend build run test lint clean refresh
+.PHONY: install up down clean build run test test-integration test-all lint format refresh dev
+
+# ---------- Docker ----------
+
+# Build and start the container (frontend on :3001)
+up:
+	docker compose up -d --build
+
+# Stop the container (keep data)
+down:
+	docker compose down
+
+# Stop and wipe all data
+clean:
+	docker compose down -v
+
+# Tail container logs
+logs:
+	docker compose logs -f
+
+# ---------- Local dev ----------
 
 # Install all dependencies (backend + frontend)
 install:
@@ -6,7 +26,7 @@ install:
 	.venv/bin/pip install -e ".[dev]"
 	cd frontend && npm install
 
-# Development: run both backend and frontend with hot reload
+# Run backend + frontend locally with hot reload
 dev:
 	@echo "Starting API on :8000 and frontend on :8080..."
 	@echo "Open http://localhost:8080"
@@ -15,19 +35,11 @@ dev:
 		cd frontend && npm run dev &  \
 		wait
 
-# Run just the API (backend only)
-dev-api:
-	.venv/bin/uvicorn fpl.api.app:app --port 8000 --reload
-
-# Run just the frontend dev server
-dev-frontend:
-	cd frontend && npm run dev
-
 # Build frontend for production
 build:
 	cd frontend && npm run build
 
-# Production: serve everything from FastAPI (build frontend first)
+# Serve production build locally
 run: build
 	@echo "Serving at http://localhost:8000"
 	.venv/bin/uvicorn fpl.api.app:app --port 8000
@@ -36,7 +48,8 @@ run: build
 refresh:
 	.venv/bin/fpl data refresh
 
-# Run tests
+# ---------- Testing ----------
+
 test:
 	.venv/bin/pytest tests/ -v -m "not integration"
 
@@ -46,7 +59,8 @@ test-integration:
 test-all:
 	.venv/bin/pytest tests/ -v
 
-# Code quality
+# ---------- Code quality ----------
+
 lint:
 	.venv/bin/black --check src/ tests/
 	.venv/bin/ruff check src/ tests/
@@ -55,9 +69,3 @@ lint:
 format:
 	.venv/bin/black src/ tests/
 	.venv/bin/ruff check --fix src/ tests/
-
-# Clean build artifacts
-clean:
-	rm -rf frontend/dist frontend/node_modules/.vite
-	rm -rf .pytest_cache .mypy_cache .ruff_cache
-	find . -type d -name __pycache__ -exec rm -rf {} +

@@ -3,14 +3,20 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter
 
 from fpl.db.engine import get_session
-from fpl.db.models import IngestLog
+from fpl.db.models import IngestLog, MyAccount
 
 router = APIRouter()
 
-_SOURCES = ("fpl", "understat", "odds", "injuries", "projections")
+
+def _now_utc() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+_SOURCES = ("fpl", "understat", "odds", "injuries", "projections", "team")
 
 
 def _last_success_age_secs(source: str, session: object) -> float | None:
@@ -123,12 +129,44 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
 
             await run_projections_ingest(session)
 
+    async def _run_team() -> None:
+        with get_session() as session:
+            account: MyAccount | None = session.get(MyAccount, 1)
+        if account is None:
+            raise ValueError("No team loaded — load one via Settings first")
+        team_id = account.fpl_team_id
+
+        from fpl.config import get_settings
+        from fpl.ingest.fpl_api import fetch_entry, fetch_entry_picks, upsert_my_team
+
+        started = _now_utc()
+        settings = get_settings()
+        headers = {"User-Agent": settings.user_agent}
+        async with httpx.AsyncClient(
+            timeout=settings.http_timeout, headers=headers
+        ) as client:
+            entry = await fetch_entry(client, settings, team_id)
+            current_gw = entry.get("current_event", 1)
+            picks = await fetch_entry_picks(client, settings, team_id, current_gw)
+            with get_session() as session:
+                count = upsert_my_team(session, team_id, entry, picks)
+                session.add(
+                    IngestLog(
+                        source="team",
+                        status="success",
+                        records_upserted=count,
+                        started_at=started,
+                        finished_at=_now_utc(),
+                    )
+                )
+
     _RUNNER_MAP = {
         "fpl": _run_fpl,
         "understat": _run_understat,
         "odds": _run_odds,
         "injuries": _run_injuries,
         "projections": _run_projections,
+        "team": _run_team,
     }
 
     sources_to_run = list(_RUNNER_MAP.keys()) if source == "all" else [source]
