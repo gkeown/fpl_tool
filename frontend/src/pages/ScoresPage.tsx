@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAutoRefresh, useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,15 +18,6 @@ const LEAGUE_SHORT: Record<string, string> = {
   "ger.1": "Bundesliga",
   "fra.1": "Ligue 1",
 };
-
-function isAutoRefreshWindow(): boolean {
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 6=Sat
-  const hour = now.getHours();
-  if (day === 6 && hour >= 12 && hour < 22) return true; // Sat 12-22
-  if (day === 0 && hour >= 12 && hour < 22) return true; // Sun 12-22
-  return false;
-}
 
 function MatchStatusBadge({ status, elapsed }: { status: string; elapsed: number | null }) {
   if (status === "NS" || status === "TBD") {
@@ -189,20 +180,13 @@ function LeagueSection({ league }: { league: any }) {
 
 export default function ScoresPage() {
   const qc = useQueryClient();
-  const [autoRefresh, setAutoRefresh] = useState(isAutoRefreshWindow());
-
-  // Check auto-refresh window every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setAutoRefresh(isAutoRefreshWindow());
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, []);
+  const autoRefresh = useAutoRefresh();
+  const refetchInterval = useAutoRefreshInterval();
 
   const scores = useQuery({
     queryKey: ["todayScores"],
     queryFn: () => api.getTodayScores(),
-    refetchInterval: autoRefresh ? 60_000 : false,
+    refetchInterval,
   });
 
   const data = scores.data as any;

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
+import { useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export default function LeaguePage() {
     },
   });
 
+  const refetchInterval = useAutoRefreshInterval();
   const leagueList = (leagues.data as any[]) ?? [];
 
   // Auto-select first league if none selected
@@ -48,6 +50,7 @@ export default function LeaguePage() {
     queryKey: ["leagueStandings", activeLeagueId],
     queryFn: () => api.getLeagueStandings(activeLeagueId!),
     enabled: activeLeagueId != null,
+    refetchInterval,
   });
 
   const standingsData = standings.data as any;

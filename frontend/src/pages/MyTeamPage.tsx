@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
 import FormBadge from "@/components/FormBadge";
 import StatusBadge from "@/components/StatusBadge";
@@ -87,8 +88,9 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
 
 export default function MyTeamPage() {
   const qc = useQueryClient();
-  const team = useQuery({ queryKey: ["team"], queryFn: () => api.getTeam() });
-  const analysis = useQuery({ queryKey: ["teamAnalysis"], queryFn: () => api.getTeamAnalysis(5) });
+  const refetchInterval = useAutoRefreshInterval();
+  const team = useQuery({ queryKey: ["team"], queryFn: () => api.getTeam(), refetchInterval });
+  const analysis = useQuery({ queryKey: ["teamAnalysis"], queryFn: () => api.getTeamAnalysis(5), refetchInterval });
 
   const teamData = team.data as any;
   const analysisData = analysis.data as any;
