@@ -38,12 +38,12 @@ function makeColumns(isRisers: boolean): ColumnDef<PricePlayer, any>[] {
     { accessorKey: "team", header: "Team", size: 70 },
     { accessorKey: "position", header: "Pos", size: 60 },
     {
-      accessorKey: "price", header: "Price", size: 80,
-      cell: ({ row }) => <span className="tabular-nums">{'\u00A3'}{row.original.price}m</span>,
+      accessorKey: "cost", header: "Price", size: 80,
+      cell: ({ row }) => <span className="tabular-nums">{'\u00A3'}{row.original.cost}m</span>,
     },
     {
-      accessorKey: "ownership_pct", header: "Own%", size: 75,
-      cell: ({ row }) => <span className="tabular-nums">{row.original.ownership_pct?.toFixed(1)}%</span>,
+      accessorKey: "ownership", header: "Own%", size: 75,
+      cell: ({ row }) => <span className="tabular-nums">{row.original.ownership?.toFixed(1)}%</span>,
     },
     {
       accessorKey: "transfers_in_event", header: "In", size: 90,

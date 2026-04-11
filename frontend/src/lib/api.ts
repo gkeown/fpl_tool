@@ -209,11 +209,12 @@ export interface FormPlayer {
 
 export interface PricePlayer {
   rank: number;
+  id: number;
   player: string;
   team: string;
   position: string;
-  price: number;
-  ownership_pct: number;
+  cost: string;
+  ownership: number;
   transfers_in_event: number;
   transfers_out_event: number;
   net_transfers_event: number;
