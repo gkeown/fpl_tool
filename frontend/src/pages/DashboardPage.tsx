@@ -23,7 +23,7 @@ export default function DashboardPage() {
 
   const teamData = team.data as any;
   const starters = teamData?.players?.filter((p: any) => p.is_starter) || [];
-  const projected1 = starters.reduce((s: number, p: any) => s + (p.xpts_next_gw || 0), 0);
+  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0), 0);
 
   return (
     <div>
@@ -67,8 +67,8 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-baseline gap-6 mb-3">
                 <div>
-                  <span className="text-4xl font-display font-bold text-fpl-green">{teamData.gameweek_points ?? 0}</span>
-                  <p className="text-xs text-muted-foreground mt-0.5">GW{teamData.gameweek} Points</p>
+                  <span className="text-4xl font-display font-bold text-fpl-green">{xiTotal}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">GW{teamData.gameweek} XI Live</p>
                 </div>
                 <div>
                   <span className="text-2xl font-display font-semibold text-muted-foreground">{teamData.overall_points}</span>

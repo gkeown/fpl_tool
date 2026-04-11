@@ -85,13 +85,18 @@ def _seed_team_data(session: Session) -> None:
     session.commit()
 
 
+async def _mock_live_gw(gw: int) -> dict:
+    return {}
+
+
 async def test_get_team_returns_gameweek_points(
     db_session: Session, _patch_db: None,
 ) -> None:
     """GET /api/me/team should return gameweek_points from MyAccount."""
     _seed_team_data(db_session)
 
-    with patch("fpl.api.app.init_db"):
+    with patch("fpl.api.app.init_db"), \
+         patch("fpl.api.routes.team._fetch_live_gw", _mock_live_gw):
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -112,7 +117,8 @@ async def test_get_team_returns_player_gw_points(
     """Each player should have event_points and gw_points (with captain multiplier)."""
     _seed_team_data(db_session)
 
-    with patch("fpl.api.app.init_db"):
+    with patch("fpl.api.app.init_db"), \
+         patch("fpl.api.routes.team._fetch_live_gw", _mock_live_gw):
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -141,7 +147,8 @@ async def test_get_team_404_when_no_team(
     ))
     db_session.commit()
 
-    with patch("fpl.api.app.init_db"):
+    with patch("fpl.api.app.init_db"), \
+         patch("fpl.api.routes.team._fetch_live_gw", _mock_live_gw):
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -156,7 +163,8 @@ async def test_get_team_player_fields(
     """Each player dict should contain all expected fields."""
     _seed_team_data(db_session)
 
-    with patch("fpl.api.app.init_db"):
+    with patch("fpl.api.app.init_db"), \
+         patch("fpl.api.routes.team._fetch_live_gw", _mock_live_gw):
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:

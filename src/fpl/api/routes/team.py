@@ -15,7 +15,6 @@ from fpl.db.models import (
     MyAccount,
     MyTeamPlayer,
     Player,
-    PlayerGameweekStats,
     PlayerProjection,
     Team,
 )
@@ -23,9 +22,29 @@ from fpl.db.models import (
 router = APIRouter()
 
 
+async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
+    """Fetch live GW data from FPL API. Returns {player_id: stats}."""
+    settings = get_settings()
+    headers = {"User-Agent": settings.user_agent}
+    try:
+        async with httpx.AsyncClient(
+            timeout=settings.http_timeout, headers=headers
+        ) as client:
+            url = f"{settings.fpl_base_url}/event/{gw}/live/"
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+            return {
+                el["id"]: el.get("stats", {})
+                for el in data.get("elements", [])
+            }
+    except Exception:
+        return {}
+
+
 @router.get("/team")
-def get_team() -> dict[str, Any]:
-    """Current squad with form + projected points."""
+async def get_team() -> dict[str, Any]:
+    """Current squad with form + projected points + live bonus."""
     with get_session() as session:
         rows = (
             session.query(MyTeamPlayer, Player, Team)
@@ -52,21 +71,6 @@ def get_team() -> dict[str, Any]:
         )
         proj_lookup: dict[int, float] = {p.player_id: p.gw1_pts for p in proj_rows}
 
-        # Bonus points for current GW
-        bonus_rows: list[PlayerGameweekStats] = (
-            session.query(PlayerGameweekStats)
-            .filter(
-                PlayerGameweekStats.player_id.in_(player_ids),
-                PlayerGameweekStats.gameweek == current_gw,
-            )
-            .all()
-        )
-        bonus_lookup: dict[int, int] = {}
-        for br in bonus_rows:
-            bonus_lookup[br.player_id] = (
-                bonus_lookup.get(br.player_id, 0) + br.bonus
-            )
-
         ep_lookup: dict[int, float] = {}
         for _mtp, player, _ in rows:
             if player.fpl_id not in proj_lookup:
@@ -76,29 +80,22 @@ def get_team() -> dict[str, Any]:
                         ep_val = float(player.ep_next)
                 ep_lookup[player.fpl_id] = ep_val
 
-        def _xpts(pid: int) -> float:
-            return proj_lookup.get(pid, ep_lookup.get(pid, 0.0))
-
-        players_out: list[dict[str, Any]] = []
+        # Snapshot DB data while session is open
+        db_players: list[dict[str, Any]] = []
         for mtp, player, tm in rows:
-            event_pts = player.event_points or 0
-            players_out.append(
+            db_players.append(
                 {
-                    "id": player.fpl_id,
+                    "fpl_id": player.fpl_id,
                     "web_name": player.web_name,
-                    "team": tm.short_name,
-                    "position": position_str(player.element_type),
-                    "cost": float(player.now_cost) / 10,
-                    "selling_price": float(mtp.selling_price) / 10,
-                    "form": float(player.form),
-                    "xpts_next_gw": round(_xpts(player.fpl_id), 2),
-                    "event_points": event_pts,
-                    "gw_points": event_pts * mtp.multiplier,
-                    "gw_bonus": bonus_lookup.get(player.fpl_id, 0),
+                    "team_short": tm.short_name,
+                    "element_type": player.element_type,
+                    "now_cost": player.now_cost,
+                    "selling_price": mtp.selling_price,
+                    "form": player.form,
+                    "event_points": player.event_points or 0,
                     "status": player.status,
                     "news": player.news,
-                    "is_starter": mtp.position <= 11,
-                    "squad_position": mtp.position,
+                    "position": mtp.position,
                     "is_captain": mtp.is_captain,
                     "is_vice_captain": mtp.is_vice_captain,
                     "multiplier": mtp.multiplier,
@@ -111,18 +108,62 @@ def get_team() -> dict[str, Any]:
         if account and account.chips_json:
             with contextlib.suppress(json.JSONDecodeError):
                 chips = json.loads(account.chips_json)
+        active_chip = account.active_chip if account else None
+        gw_points_official = account.gameweek_points if account else 0
+        bank = float(account.bank) / 10 if account else 0.0
+        free_transfers = account.free_transfers if account else 1
+        overall_points = account.overall_points if account else 0
+        overall_rank = account.overall_rank if account else 0
 
-        return {
-            "gameweek": current_gw,
-            "gameweek_points": account.gameweek_points if account else 0,
-            "bank": float(account.bank) / 10 if account else 0.0,
-            "free_transfers": account.free_transfers if account else 1,
-            "overall_points": account.overall_points if account else 0,
-            "overall_rank": account.overall_rank if account else 0,
-            "active_chip": account.active_chip if account else None,
-            "chips": chips,
-            "players": players_out,
-        }
+    # Fetch live GW data (outside session — async call)
+    live_data = await _fetch_live_gw(current_gw) if current_gw else {}
+
+    def _xpts(pid: int) -> float:
+        return proj_lookup.get(pid, ep_lookup.get(pid, 0.0))
+
+    players_out: list[dict[str, Any]] = []
+    for p in db_players:
+        pid = p["fpl_id"]
+        # Use live total_points and bonus if available
+        live_stats = live_data.get(pid, {})
+        live_pts = live_stats.get("total_points")
+        live_bonus = live_stats.get("bonus", 0)
+        event_pts = live_pts if live_pts is not None else p["event_points"]
+
+        players_out.append(
+            {
+                "id": pid,
+                "web_name": p["web_name"],
+                "team": p["team_short"],
+                "position": position_str(p["element_type"]),
+                "cost": float(p["now_cost"]) / 10,
+                "selling_price": float(p["selling_price"]) / 10,
+                "form": float(p["form"]),
+                "xpts_next_gw": round(_xpts(pid), 2),
+                "event_points": event_pts,
+                "gw_points": event_pts * p["multiplier"],
+                "gw_bonus": live_bonus,
+                "status": p["status"],
+                "news": p["news"],
+                "is_starter": p["position"] <= 11,
+                "squad_position": p["position"],
+                "is_captain": p["is_captain"],
+                "is_vice_captain": p["is_vice_captain"],
+                "multiplier": p["multiplier"],
+            }
+        )
+
+    return {
+        "gameweek": current_gw,
+        "gameweek_points": gw_points_official,
+        "bank": bank,
+        "free_transfers": free_transfers,
+        "overall_points": overall_points,
+        "overall_rank": overall_rank,
+        "active_chip": active_chip,
+        "chips": chips,
+        "players": players_out,
+    }
 
 
 @router.get("/analyse")
