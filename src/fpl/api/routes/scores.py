@@ -29,6 +29,8 @@ _ESPN_STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports/soccer"
 
 _LEAGUES = [
     {"slug": "eng.1", "name": "Premier League", "country": "England"},
+    {"slug": "eng.2", "name": "Championship", "country": "England"},
+    {"slug": "sco.1", "name": "Scottish Premiership", "country": "Scotland"},
     {"slug": "ita.1", "name": "Serie A", "country": "Italy"},
     {"slug": "esp.1", "name": "La Liga", "country": "Spain"},
     {"slug": "ger.1", "name": "Bundesliga", "country": "Germany"},
@@ -344,6 +346,7 @@ async def today_scores(
 _STANDINGS_LEAGUES = [
     {"slug": "eng.1", "name": "Premier League", "country": "England"},
     {"slug": "eng.2", "name": "Championship", "country": "England"},
+    {"slug": "sco.1", "name": "Scottish Premiership", "country": "Scotland"},
     {"slug": "ita.1", "name": "Serie A", "country": "Italy"},
     {"slug": "esp.1", "name": "La Liga", "country": "Spain"},
     {"slug": "ger.1", "name": "Bundesliga", "country": "Germany"},

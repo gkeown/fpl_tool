@@ -8,10 +8,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { RotateCw, Circle } from "lucide-react";
 
-const LEAGUE_ORDER = ["eng.1", "eng.2", "ita.1", "esp.1", "ger.1", "fra.1"];
+const LEAGUE_ORDER = ["eng.1", "eng.2", "sco.1", "ita.1", "esp.1", "ger.1", "fra.1"];
 const LEAGUE_SHORT: Record<string, string> = {
   "eng.1": "PL",
   "eng.2": "Championship",
+  "sco.1": "SPL",
   "ita.1": "Serie A",
   "esp.1": "La Liga",
   "ger.1": "Bundesliga",
