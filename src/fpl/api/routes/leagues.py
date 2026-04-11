@@ -233,48 +233,49 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             p.fpl_id: p.web_name for p in transfer_players
         }
 
-    def _xpts(pid: int) -> float:
-        if pid in proj_lookup:
-            return proj_lookup[pid]
-        player_data = player_map.get(pid)
-        if player_data:
-            p = player_data[0]
-            if p.ep_next:
+        # Build ep_next fallback lookup (while session is open)
+        ep_lookup: dict[int, float] = {}
+        for pid_val in player_ids:
+            pd = player_map.get(pid_val)
+            if pd and pid_val not in proj_lookup and pd[0].ep_next:
                 with contextlib.suppress(ValueError):
-                    return float(p.ep_next)
-        return 0.0
+                    ep_lookup[pid_val] = float(pd[0].ep_next)
 
-    players_out: list[dict[str, Any]] = []
-    for pick in pick_list:
-        pid = pick["element"]
-        player_data = player_map.get(pid)
-        if not player_data:
-            continue
-        player, tm = player_data
-        event_pts = player.event_points or 0
-        multiplier = pick.get("multiplier", 1)
+        # Build player dicts while session is still open
+        players_out: list[dict[str, Any]] = []
+        for pick in pick_list:
+            pid = pick["element"]
+            pd = player_map.get(pid)
+            if not pd:
+                continue
+            player, tm = pd
+            event_pts = player.event_points or 0
+            multiplier = pick.get("multiplier", 1)
+            xpts = proj_lookup.get(
+                pid, ep_lookup.get(pid, 0.0)
+            )
 
-        players_out.append(
-            {
-                "id": player.fpl_id,
-                "web_name": player.web_name,
-                "team": tm.short_name,
-                "position": position_str(player.element_type),
-                "cost": float(player.now_cost) / 10,
-                "form": float(player.form),
-                "xpts_next_gw": round(_xpts(player.fpl_id), 2),
-                "event_points": event_pts,
-                "gw_points": event_pts * multiplier,
-                "gw_bonus": bonus_lookup.get(player.fpl_id, 0),
-                "status": player.status,
-                "news": player.news,
-                "is_starter": pick["position"] <= 11,
-                "squad_position": pick["position"],
-                "is_captain": pick.get("is_captain", False),
-                "is_vice_captain": pick.get("is_vice_captain", False),
-                "multiplier": multiplier,
-            }
-        )
+            players_out.append(
+                {
+                    "id": player.fpl_id,
+                    "web_name": player.web_name,
+                    "team": tm.short_name,
+                    "position": position_str(player.element_type),
+                    "cost": float(player.now_cost) / 10,
+                    "form": float(player.form),
+                    "xpts_next_gw": round(xpts, 2),
+                    "event_points": event_pts,
+                    "gw_points": event_pts * multiplier,
+                    "gw_bonus": bonus_lookup.get(pid, 0),
+                    "status": player.status,
+                    "news": player.news,
+                    "is_starter": pick["position"] <= 11,
+                    "squad_position": pick["position"],
+                    "is_captain": pick.get("is_captain", False),
+                    "is_vice_captain": pick.get("is_vice_captain", False),
+                    "multiplier": multiplier,
+                }
+            )
 
     transfers_out: list[dict[str, Any]] = [
         {
@@ -291,7 +292,9 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             "element_out_cost": t["element_out_cost"],
             "time": t.get("time", ""),
         }
-        for t in sorted(transfers, key=lambda x: x.get("time", ""), reverse=True)
+        for t in sorted(
+            transfers, key=lambda x: x.get("time", ""), reverse=True
+        )
     ]
 
     manager_name = (
