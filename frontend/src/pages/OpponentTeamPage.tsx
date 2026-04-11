@@ -62,8 +62,8 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                   <FormBadge value={p.form || 0} />
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
-                  <span className={`font-semibold ${(p.gw_points || 0) >= 8 ? "text-fpl-green" : ""}`}>
-                    {p.gw_points ?? 0}
+                  <span className={`font-semibold ${((p.gw_points || p.event_points || 0)) >= 8 ? "text-fpl-green" : ""}`}>
+                    {p.gw_points || p.event_points || 0}
                   </span>
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
