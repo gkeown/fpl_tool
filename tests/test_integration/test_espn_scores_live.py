@@ -33,16 +33,16 @@ def pl_scoreboard() -> dict[str, Any]:
             resp.raise_for_status()
             return resp.json()
 
-    return asyncio.get_event_loop().run_until_complete(_fetch())
+    return asyncio.run(_fetch())
 
 
-def test_scoreboard_has_events(pl_scoreboard: dict[str, Any]) -> None:
+async def test_scoreboard_has_events(pl_scoreboard: dict[str, Any]) -> None:
     """Scoreboard response should have an events array."""
     assert "events" in pl_scoreboard
     assert isinstance(pl_scoreboard["events"], list)
 
 
-def test_scoreboard_event_structure(
+async def test_scoreboard_event_structure(
     pl_scoreboard: dict[str, Any],
 ) -> None:
     """Each event should have required fields."""
@@ -67,7 +67,7 @@ def test_scoreboard_event_structure(
         assert c["homeAway"] in ("home", "away")
 
 
-def test_scoreboard_status_fields(
+async def test_scoreboard_status_fields(
     pl_scoreboard: dict[str, Any],
 ) -> None:
     """Status should have type with name and state."""
@@ -81,7 +81,7 @@ def test_scoreboard_status_fields(
     assert status["type"]["name"].startswith("STATUS_")
 
 
-def test_scoreboard_details_for_scoring(
+async def test_scoreboard_details_for_scoring(
     pl_scoreboard: dict[str, Any],
 ) -> None:
     """Finished matches should have details with scoringPlay events."""
@@ -112,7 +112,7 @@ def test_scoreboard_details_for_scoring(
 
 
 @pytest.mark.parametrize("slug", LEAGUES)
-def test_scoreboard_reachable_for_all_leagues(slug: str) -> None:
+async def test_scoreboard_reachable_for_all_leagues(slug: str) -> None:
     """Each league's scoreboard endpoint should return 200."""
 
     async def _fetch() -> int:
@@ -122,12 +122,12 @@ def test_scoreboard_reachable_for_all_leagues(slug: str) -> None:
             )
             return resp.status_code
 
-    status = asyncio.get_event_loop().run_until_complete(_fetch())
+    status = await _fetch()
     assert status == 200
 
 
 @pytest.mark.parametrize("slug", LEAGUES)
-def test_standings_reachable_for_all_leagues(slug: str) -> None:
+async def test_standings_reachable_for_all_leagues(slug: str) -> None:
     """Each league's standings endpoint should return 200."""
 
     async def _fetch() -> int:
@@ -137,11 +137,11 @@ def test_standings_reachable_for_all_leagues(slug: str) -> None:
             )
             return resp.status_code
 
-    status = asyncio.get_event_loop().run_until_complete(_fetch())
+    status = await _fetch()
     assert status == 200
 
 
-def test_standings_structure() -> None:
+async def test_standings_structure() -> None:
     """PL standings should have entries with stats."""
 
     async def _fetch() -> dict[str, Any]:
@@ -152,7 +152,7 @@ def test_standings_structure() -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
     children = data.get("children", [])
     assert len(children) > 0
 

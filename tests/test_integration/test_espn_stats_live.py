@@ -23,7 +23,7 @@ ESPN_ATHLETE = (
 )
 
 
-def test_search_returns_players() -> None:
+async def test_search_returns_players() -> None:
     """Searching for 'Saka' should return player results."""
 
     async def _fetch() -> dict[str, Any]:
@@ -40,7 +40,7 @@ def test_search_returns_players() -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
     items = data.get("items", [])
     assert len(items) > 0
 
@@ -55,7 +55,7 @@ def test_search_returns_players() -> None:
     assert saka.get("league") == "eng.1"
 
 
-def test_search_result_structure() -> None:
+async def test_search_result_structure() -> None:
     """Each search result should have required fields."""
 
     async def _fetch() -> list[dict[str, Any]]:
@@ -72,7 +72,7 @@ def test_search_result_structure() -> None:
             resp.raise_for_status()
             return resp.json().get("items", [])
 
-    items = asyncio.get_event_loop().run_until_complete(_fetch())
+    items = await _fetch()
     assert len(items) > 0
 
     player = items[0]
@@ -81,7 +81,7 @@ def test_search_result_structure() -> None:
     assert "league" in player
 
 
-def test_athlete_detail_has_stats() -> None:
+async def test_athlete_detail_has_stats() -> None:
     """Fetching a known player should return stats summary."""
 
     async def _fetch() -> dict[str, Any]:
@@ -116,7 +116,7 @@ def test_athlete_detail_has_stats() -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
     athlete = data.get("athlete", {})
     assert athlete.get("displayName")
 
@@ -129,7 +129,7 @@ def test_athlete_detail_has_stats() -> None:
     assert "totalGoals" in stat_names or "starts-subIns" in stat_names
 
 
-def test_athlete_detail_has_profile_info() -> None:
+async def test_athlete_detail_has_profile_info() -> None:
     """Athlete detail should include position, team, nationality."""
 
     async def _fetch() -> dict[str, Any]:
@@ -162,13 +162,13 @@ def test_athlete_detail_has_profile_info() -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
     athlete = data.get("athlete", {})
     assert athlete.get("position", {}).get("displayName")
     assert athlete.get("team", {}).get("displayName")
 
 
-def test_search_across_leagues() -> None:
+async def test_search_across_leagues() -> None:
     """Search should find players from non-PL leagues."""
 
     async def _fetch() -> list[dict[str, Any]]:
@@ -185,7 +185,7 @@ def test_search_across_leagues() -> None:
             resp.raise_for_status()
             return resp.json().get("items", [])
 
-    items = asyncio.get_event_loop().run_until_complete(_fetch())
+    items = await _fetch()
     mbappe = next(
         (
             i

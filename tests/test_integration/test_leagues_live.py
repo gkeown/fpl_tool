@@ -29,7 +29,7 @@ def settings():
     return get_settings()
 
 
-def test_league_standings_structure(settings: Any) -> None:
+async def test_league_standings_structure(settings: Any) -> None:
     """Classic league standings should return league info + results."""
 
     async def _fetch() -> dict[str, Any]:
@@ -42,7 +42,7 @@ def test_league_standings_structure(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert "league" in data
     assert "standings" in data
@@ -61,7 +61,7 @@ def test_league_standings_structure(settings: Any) -> None:
     assert isinstance(entry["total"], int)
 
 
-def test_entry_data_structure(settings: Any) -> None:
+async def test_entry_data_structure(settings: Any) -> None:
     """Public entry endpoint should return manager info."""
 
     async def _fetch() -> dict[str, Any]:
@@ -74,7 +74,7 @@ def test_entry_data_structure(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert data.get("id") == TEST_ENTRY_ID
     assert "player_first_name" in data
@@ -88,7 +88,7 @@ def test_entry_data_structure(settings: Any) -> None:
     assert "last_deadline_value" in data
 
 
-def test_entry_picks_structure(settings: Any) -> None:
+async def test_entry_picks_structure(settings: Any) -> None:
     """Entry picks should return 15 players with captain info."""
 
     async def _fetch() -> dict[str, Any]:
@@ -107,7 +107,7 @@ def test_entry_picks_structure(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert "picks" in data
     assert "entry_history" in data
@@ -132,7 +132,7 @@ def test_entry_picks_structure(settings: Any) -> None:
     assert "points" in history
 
 
-def test_entry_transfers_structure(settings: Any) -> None:
+async def test_entry_transfers_structure(settings: Any) -> None:
     """Entry transfers should return array of transfer objects."""
 
     async def _fetch() -> list[dict[str, Any]]:
@@ -145,7 +145,7 @@ def test_entry_transfers_structure(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert isinstance(data, list)
     assert len(data) > 0
@@ -161,7 +161,7 @@ def test_entry_transfers_structure(settings: Any) -> None:
     assert isinstance(transfer["event"], int)
 
 
-def test_entry_history_has_chips(settings: Any) -> None:
+async def test_entry_history_has_chips(settings: Any) -> None:
     """Entry history should include chips array."""
 
     async def _fetch() -> dict[str, Any]:
@@ -174,7 +174,7 @@ def test_entry_history_has_chips(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert "chips" in data
     assert isinstance(data["chips"], list)
@@ -191,7 +191,7 @@ def test_entry_history_has_chips(settings: Any) -> None:
         )
 
 
-def test_live_gw_endpoint_structure(settings: Any) -> None:
+async def test_live_gw_endpoint_structure(settings: Any) -> None:
     """The /event/{gw}/live/ endpoint should return player live stats."""
 
     async def _fetch() -> dict[str, Any]:
@@ -214,7 +214,7 @@ def test_live_gw_endpoint_structure(settings: Any) -> None:
             resp.raise_for_status()
             return resp.json()
 
-    data = asyncio.get_event_loop().run_until_complete(_fetch())
+    data = await _fetch()
 
     assert "elements" in data
     elements = data["elements"]
