@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import PageHeader from "@/components/PageHeader";
@@ -18,7 +19,16 @@ const LEAGUE_SHORT: Record<string, string> = {
   "fra.1": "Ligue 1",
 };
 
-function StatusBadge({ status, elapsed }: { status: string; elapsed: number | null }) {
+function isAutoRefreshWindow(): boolean {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 6=Sat
+  const hour = now.getHours();
+  if (day === 6 && hour >= 12 && hour < 22) return true; // Sat 12-22
+  if (day === 0 && hour >= 12 && hour < 22) return true; // Sun 12-22
+  return false;
+}
+
+function MatchStatusBadge({ status, elapsed }: { status: string; elapsed: number | null }) {
   if (status === "NS" || status === "TBD") {
     return <Badge variant="outline" className="text-xs text-muted-foreground">Not Started</Badge>;
   }
@@ -42,23 +52,79 @@ function StatusBadge({ status, elapsed }: { status: string; elapsed: number | nu
   return <Badge variant="outline" className="text-xs">{status}</Badge>;
 }
 
+function GoalList({ goals, align }: { goals: any[]; align: "left" | "right" }) {
+  if (goals.length === 0) return null;
+  return (
+    <div className={`space-y-0.5 ${align === "right" ? "text-right" : "text-left"}`}>
+      {goals.map((e: any, i: number) => {
+        const minuteStr = e.extra_minute ? `${e.minute}+${e.extra_minute}'` : `${e.minute}'` || "";
+        const isPenalty = e.detail === "Penalty" || e.detail === "Penalty - Scored";
+        const isOwnGoal = e.detail === "Own Goal";
+        return (
+          <div key={i} className={`text-xs flex items-center gap-1.5 ${align === "right" ? "justify-end" : ""}`}>
+            {align === "left" && <span className="text-muted-foreground tabular-nums">{minuteStr}</span>}
+            <span className="text-fpl-green font-medium">
+              {e.player}
+              {isPenalty && <span className="text-muted-foreground ml-1">(pen)</span>}
+              {isOwnGoal && <span className="text-fpl-pink ml-1">(og)</span>}
+            </span>
+            {e.assist && <span className="text-muted-foreground">({e.assist})</span>}
+            {align === "right" && <span className="text-muted-foreground tabular-nums">{minuteStr}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RedCardList({ cards, align }: { cards: any[]; align: "left" | "right" }) {
+  if (cards.length === 0) return null;
+  return (
+    <div className={`space-y-0.5 ${align === "right" ? "text-right" : "text-left"}`}>
+      {cards.map((e: any, i: number) => {
+        const minuteStr = e.minute || "";
+        return (
+          <div key={i} className={`text-xs flex items-center gap-1.5 ${align === "right" ? "justify-end" : ""}`}>
+            {align === "left" && <span className="text-muted-foreground tabular-nums">{minuteStr}</span>}
+            <span className="text-fpl-pink font-medium">
+              {e.player}
+              {e.detail === "Second Yellow" && <span className="text-muted-foreground ml-1">(2nd yellow)</span>}
+            </span>
+            <span className="text-fpl-pink">&#x1F7E5;</span>
+            {align === "right" && <span className="text-muted-foreground tabular-nums">{minuteStr}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MatchCard({ match }: { match: any }) {
   const isLive = ["1H", "2H", "ET"].includes(match.status);
   const hasStarted = match.status !== "NS" && match.status !== "TBD";
   const kickoffTime = match.kickoff
     ? new Date(match.kickoff).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : "";
+  const matchDate = match.kickoff
+    ? new Date(match.kickoff).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })
+    : "";
 
-  const goalEvents = (match.events || []).filter((e: any) => e.type === "Goal");
+  const allEvents = match.events || [];
+  const goalEvents = allEvents.filter((e: any) => e.type === "Goal");
+  const redCards = allEvents.filter((e: any) => e.type === "Red Card");
+  const homeGoals = goalEvents.filter((e: any) => e.team === match.home_team);
+  const awayGoals = goalEvents.filter((e: any) => e.team === match.away_team);
+  const homeReds = redCards.filter((e: any) => e.team === match.home_team);
+  const awayReds = redCards.filter((e: any) => e.team === match.away_team);
 
   return (
     <Card className={`mb-2 overflow-hidden ${isLive ? "border-fpl-green/30" : ""}`}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
-          <StatusBadge status={match.status} elapsed={match.elapsed} />
-          {!hasStarted && kickoffTime && (
-            <span className="text-xs text-muted-foreground">{kickoffTime}</span>
-          )}
+          <MatchStatusBadge status={match.status} elapsed={match.elapsed} />
+          <span className="text-xs text-muted-foreground">
+            {!hasStarted && kickoffTime ? `${matchDate} ${kickoffTime}` : matchDate}
+          </span>
         </div>
 
         {/* Score line */}
@@ -76,31 +142,31 @@ function MatchCard({ match }: { match: any }) {
           <span className="text-sm font-semibold flex-1 text-right">{match.away_team}</span>
         </div>
 
-        {/* Goal scorers */}
+        {/* Goal scorers split by team */}
         {goalEvents.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-border/30 space-y-1">
-            {goalEvents.map((e: any, i: number) => {
-              const minuteStr = e.extra_minute
-                ? `${e.minute}+${e.extra_minute}'`
-                : `${e.minute}'`;
-              const isPenalty = e.detail === "Penalty";
-              const isOwnGoal = e.detail === "Own Goal";
-              return (
-                <div key={i} className="flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground tabular-nums w-10">{minuteStr}</span>
-                  <span className="text-fpl-green font-medium">
-                    {e.player}
-                    {isPenalty && <span className="text-muted-foreground ml-1">(pen)</span>}
-                    {isOwnGoal && <span className="text-fpl-pink ml-1">(og)</span>}
-                  </span>
-                  {e.assist && (
-                    <span className="text-muted-foreground">
-                      ast. {e.assist}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+          <div className="mt-3 pt-2 border-t border-border/30">
+            <div className="flex justify-between gap-4">
+              <div className="flex-1">
+                <GoalList goals={homeGoals} align="left" />
+              </div>
+              <div className="flex-1">
+                <GoalList goals={awayGoals} align="right" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Red cards split by team */}
+        {redCards.length > 0 && (
+          <div className={`${goalEvents.length > 0 ? "mt-2" : "mt-3 pt-2 border-t border-border/30"}`}>
+            <div className="flex justify-between gap-4">
+              <div className="flex-1">
+                <RedCardList cards={homeReds} align="left" />
+              </div>
+              <div className="flex-1">
+                <RedCardList cards={awayReds} align="right" />
+              </div>
+            </div>
           </div>
         )}
       </CardContent>
@@ -123,10 +189,20 @@ function LeagueSection({ league }: { league: any }) {
 
 export default function ScoresPage() {
   const qc = useQueryClient();
+  const [autoRefresh, setAutoRefresh] = useState(isAutoRefreshWindow());
+
+  // Check auto-refresh window every 60 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setAutoRefresh(isAutoRefreshWindow());
+    }, 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const scores = useQuery({
     queryKey: ["todayScores"],
     queryFn: () => api.getTodayScores(),
+    refetchInterval: autoRefresh ? 60_000 : false,
   });
 
   const data = scores.data as any;
@@ -137,23 +213,29 @@ export default function ScoresPage() {
       <PageHeader
         title="Live Scores"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => qc.invalidateQueries({ queryKey: ["todayScores"] })}
-            disabled={scores.isFetching}
-          >
-            <RotateCw className={`h-4 w-4 mr-1 ${scores.isFetching ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {autoRefresh && (
+              <span className="flex items-center gap-1 text-xs text-fpl-green">
+                <Circle className="h-2 w-2 fill-fpl-green animate-pulse" />
+                Auto-updating
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => qc.invalidateQueries({ queryKey: ["todayScores"] })}
+              disabled={scores.isFetching}
+            >
+              <RotateCw className={`h-4 w-4 mr-1 ${scores.isFetching ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
       {scores.isError && (
         <Alert variant="destructive" className="mb-4">
-          <AlertDescription>
-            Failed to load scores. Check that FPL_API_FOOTBALL_KEY is set in .env.
-          </AlertDescription>
+          <AlertDescription>Failed to load scores.</AlertDescription>
         </Alert>
       )}
 

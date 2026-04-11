@@ -1,12 +1,14 @@
 """Live scores via ESPN public API (no key required, unlimited requests).
 
-Goal scorers are shown for all leagues. Assists are shown for Premier
-League matches when an API-Football key is configured (optional).
+Fetches the current matchweek (Friday-Monday) for all 5 major leagues.
+Goal scorers and red cards shown for all leagues. Assists shown for
+Premier League when API-Football key is configured.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import contextlib
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -26,7 +28,6 @@ _LEAGUES = [
     {"slug": "fra.1", "name": "Ligue 1", "country": "France"},
 ]
 
-# ESPN status.type.name -> short code mapping
 _STATUS_MAP: dict[str, str] = {
     "STATUS_SCHEDULED": "NS",
     "STATUS_FIRST_HALF": "1H",
@@ -46,10 +47,34 @@ _STATUS_MAP: dict[str, str] = {
 }
 
 
+def _matchweek_dates() -> list[str]:
+    """Return date strings (YYYYMMDD) for the current matchweek.
+
+    Covers Friday through Monday of the current week. If today is
+    Tue-Thu, looks at the upcoming weekend instead.
+    """
+    today = datetime.now(UTC).date()
+    weekday = today.weekday()  # Mon=0, Sun=6
+
+    # Find the Friday that starts this matchweek
+    if weekday <= 3:  # Mon-Thu: look at the upcoming Fri
+        days_to_fri = 4 - weekday
+        friday = today + timedelta(days=days_to_fri)
+    else:  # Fri-Sun: use this week's Fri
+        days_since_fri = weekday - 4
+        friday = today - timedelta(days=days_since_fri)
+
+    # Friday through Monday (4 days)
+    return [
+        (friday + timedelta(days=d)).strftime("%Y%m%d")
+        for d in range(4)
+    ]
+
+
 async def _fetch_espn_league(
     client: httpx.AsyncClient, slug: str, date_str: str
 ) -> list[dict[str, Any]]:
-    """Fetch scoreboard for a league from ESPN."""
+    """Fetch scoreboard for a league from ESPN for a given date."""
     url = f"{_ESPN_BASE}/{slug}/scoreboard"
     params = {"dates": date_str}
     resp = await client.get(url, params=params)
@@ -70,51 +95,73 @@ def _parse_espn_match(event: dict[str, Any]) -> dict[str, Any]:
     home = next((c for c in competitors if c.get("homeAway") == "home"), {})
     away = next((c for c in competitors if c.get("homeAway") == "away"), {})
 
-    # Parse elapsed from displayClock (e.g. "67'")
     display_clock = status_obj.get("displayClock", "")
     elapsed = None
     if status_code in ("1H", "2H", "ET"):
-        try:
+        with contextlib.suppress(ValueError, AttributeError):
             elapsed = int(display_clock.replace("'", "").split("+")[0])
-        except (ValueError, AttributeError):
-            elapsed = status_obj.get("period", None)
 
     has_started = status_code not in ("NS", "PST", "CANC", "DEL", "TBD")
 
-    # Extract goal events from details
+    # Extract events from details (goals + red cards)
     details = comp.get("details", [])
     events_out: list[dict[str, Any]] = []
     for d in details:
-        if not d.get("scoringPlay"):
+        is_goal = d.get("scoringPlay", False)
+        is_red = d.get("redCard", False)
+        if not is_goal and not is_red:
             continue
+
         clock = d.get("clock", {})
         athletes = d.get("athletesInvolved", [])
-        scorer = athletes[0].get("displayName", "") if athletes else ""
+        player_name = athletes[0].get("displayName", "") if athletes else ""
         team_id = d.get("team", {}).get("id", "")
 
-        # Resolve team name from competitors
         team_name = ""
         for c in competitors:
             if c.get("id") == team_id:
                 team_name = c.get("team", {}).get("displayName", "")
                 break
 
-        type_text = d.get("type", {}).get("text", "Goal")
-        is_penalty = d.get("penaltyKick", False)
-        is_own_goal = d.get("ownGoal", False)
-        detail = "Penalty" if is_penalty else "Own Goal" if is_own_goal else type_text
+        if is_goal:
+            type_text = d.get("type", {}).get("text", "Goal")
+            is_penalty = d.get("penaltyKick", False)
+            is_own_goal = d.get("ownGoal", False)
+            detail = (
+                "Penalty"
+                if is_penalty
+                else "Own Goal"
+                if is_own_goal
+                else type_text
+            )
+            events_out.append(
+                {
+                    "minute": clock.get("displayValue", ""),
+                    "extra_minute": None,
+                    "type": "Goal",
+                    "detail": detail,
+                    "player": player_name,
+                    "assist": None,
+                    "team": team_name,
+                }
+            )
+        elif is_red:
+            is_yellow_red = d.get("yellowCard", False)
+            events_out.append(
+                {
+                    "minute": clock.get("displayValue", ""),
+                    "extra_minute": None,
+                    "type": "Red Card",
+                    "detail": "Second Yellow"
+                    if is_yellow_red
+                    else "Red Card",
+                    "player": player_name,
+                    "assist": None,
+                    "team": team_name,
+                }
+            )
 
-        events_out.append(
-            {
-                "minute": clock.get("displayValue", ""),
-                "extra_minute": None,
-                "type": "Goal",
-                "detail": detail,
-                "player": scorer,
-                "assist": None,
-                "team": team_name,
-            }
-        )
+    kickoff = event.get("date", "")
 
     return {
         "fixture_id": event.get("id", ""),
@@ -125,7 +172,8 @@ def _parse_espn_match(event: dict[str, Any]) -> dict[str, Any]:
         "away_team": away.get("team", {}).get("displayName", ""),
         "home_goals": int(home.get("score", 0)) if has_started else None,
         "away_goals": int(away.get("score", 0)) if has_started else None,
-        "kickoff": event.get("date", ""),
+        "kickoff": kickoff,
+        "date": kickoff[:10] if kickoff else "",
         "events": events_out,
     }
 
@@ -134,109 +182,123 @@ async def _enrich_pl_assists(
     client: httpx.AsyncClient,
     matches: list[dict[str, Any]],
 ) -> None:
-    """Add assist info to PL goals using API-Football (if key configured)."""
+    """Add assist info to PL goals using API-Football (if key set)."""
     settings = get_settings()
     if not settings.api_football_key:
         return
 
-    for match in matches:
-        if match["status"] in ("NS", "PST", "CANC") or not match["events"]:
-            continue
+    # Group matches by date to minimize API calls
+    dates: set[str] = set()
+    for m in matches:
+        if m.get("date"):
+            dates.add(m["date"])
+
+    for match_date in dates:
         try:
             url = f"{settings.api_football_base_url}/fixtures"
-            # Search by date and teams
             resp = await client.get(
                 url,
                 params={
                     "league": "39",
                     "season": str(settings.api_football_season),
-                    "date": datetime.now(UTC).strftime("%Y-%m-%d"),
+                    "date": match_date,
                 },
-                headers={"x-apisports-key": settings.api_football_key},
+                headers={
+                    "x-apisports-key": settings.api_football_key
+                },
             )
             resp.raise_for_status()
             api_fixtures = resp.json().get("response", [])
+        except Exception:
+            continue
 
-            # Find matching fixture by team names
+        for match in matches:
+            if match.get("date") != match_date:
+                continue
+            if match["status"] in ("NS", "PST", "CANC"):
+                continue
+
             for af in api_fixtures:
-                af_home = af.get("teams", {}).get("home", {}).get("name", "")
+                af_home = (
+                    af.get("teams", {}).get("home", {}).get("name", "")
+                )
                 if not (
                     af_home in match["home_team"]
                     or match["home_team"] in af_home
                 ):
                     continue
 
-                # Extract assists from API-Football events
                 af_events = af.get("events", [])
-                assist_map: dict[str, str] = {}
-                for ev in af_events:
-                    if ev.get("type") != "Goal":
-                        continue
-                    scorer = ev.get("player", {}).get("name", "")
-                    assister = ev.get("assist", {}).get("name")
-                    if scorer and assister:
-                        minute = ev.get("time", {}).get("elapsed", 0)
-                        assist_map[f"{minute}_{scorer}"] = assister
-
-                # Match assists to ESPN goals
                 for goal in match["events"]:
-                    minute_str = goal["minute"].replace("'", "")
-                    try:
-                        minute_int = int(minute_str.split("+")[0])
-                    except ValueError:
+                    if goal["type"] != "Goal":
                         continue
-                    # Fuzzy: match by minute (within 1 min tolerance)
-                    for k, v in assist_map.items():
-                        km = int(k.split("_")[0])
-                        if abs(km - minute_int) <= 1:
-                            goal["assist"] = v
-                            break
+                    minute_str = goal["minute"].replace("'", "")
+                    with contextlib.suppress(ValueError):
+                        minute_int = int(minute_str.split("+")[0])
+                        for ev in af_events:
+                            if ev.get("type") != "Goal":
+                                continue
+                            ev_min = ev.get("time", {}).get("elapsed", 0)
+                            if abs(ev_min - minute_int) <= 1:
+                                assister = (
+                                    ev.get("assist", {}).get("name")
+                                )
+                                if assister:
+                                    goal["assist"] = assister
+                                break
                 break
-        except Exception:
-            continue
 
 
 @router.get("/today")
 async def today_scores(date: str | None = None) -> dict[str, Any]:
-    """Fetch today's fixtures for all 5 major leagues.
+    """Fetch current matchweek fixtures for all 5 major leagues.
 
     Uses ESPN public API (no key needed, unlimited).
+    Fetches Fri-Mon of the current matchweek.
     If FPL_API_FOOTBALL_KEY is set, PL goals are enriched with assists.
     """
-    target_date = date or datetime.now(UTC).strftime("%Y-%m-%d")
-    espn_date = target_date.replace("-", "")
+    dates = [date.replace("-", "")] if date else _matchweek_dates()
 
     leagues_out: list[dict[str, Any]] = []
 
     async with httpx.AsyncClient(timeout=15) as client:
         for league_info in _LEAGUES:
-            try:
-                events = await _fetch_espn_league(
-                    client, league_info["slug"], espn_date
-                )
-            except Exception:
-                continue
+            all_matches: list[dict[str, Any]] = []
+            seen_ids: set[str] = set()
 
-            matches = [_parse_espn_match(ev) for ev in events]
+            for d in dates:
+                try:
+                    events = await _fetch_espn_league(
+                        client, league_info["slug"], d
+                    )
+                except Exception:
+                    continue
+                for ev in events:
+                    eid = ev.get("id", "")
+                    if eid not in seen_ids:
+                        seen_ids.add(eid)
+                        all_matches.append(_parse_espn_match(ev))
 
-            # Enrich PL matches with assists if API key available
-            if league_info["slug"] == "eng.1" and matches:
-                import contextlib
+            # Sort by kickoff time
+            all_matches.sort(key=lambda m: m.get("kickoff", ""))
 
+            # Enrich PL with assists
+            if league_info["slug"] == "eng.1" and all_matches:
                 with contextlib.suppress(Exception):
-                    await _enrich_pl_assists(client, matches)
+                    await _enrich_pl_assists(client, all_matches)
 
-            if matches:
+            if all_matches:
                 leagues_out.append(
                     {
                         "id": league_info["slug"],
                         "name": league_info["name"],
                         "country": league_info["country"],
-                        "matches": matches,
+                        "matches": all_matches,
                     }
                 )
 
+    display_date = date or datetime.now(UTC).strftime("%Y-%m-%d")
     return {
-        "date": target_date,
+        "date": display_date,
         "leagues": leagues_out,
     }
