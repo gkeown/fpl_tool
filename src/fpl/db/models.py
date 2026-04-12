@@ -171,6 +171,7 @@ class Fixture(Base):
     team_h_difficulty: Mapped[int]
     team_a_difficulty: Mapped[int]
     finished: Mapped[bool] = mapped_column(default=False)
+    finished_provisional: Mapped[bool] = mapped_column(default=False)
     updated_at: Mapped[str]
 
     home_team: Mapped[Team] = relationship(

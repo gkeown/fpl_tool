@@ -322,6 +322,7 @@ def upsert_fixtures(session: Session, fixtures_data: list[dict[str, Any]]) -> in
             "team_h_difficulty": f.get("team_h_difficulty", 0),
             "team_a_difficulty": f.get("team_a_difficulty", 0),
             "finished": f.get("finished", False),
+            "finished_provisional": f.get("finished_provisional", False),
             "updated_at": now,
         }
         for f in fixtures_data

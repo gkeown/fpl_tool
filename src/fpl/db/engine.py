@@ -46,6 +46,27 @@ def get_session() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
+    from sqlalchemy import text
+
     from fpl.db.models import Base
 
-    Base.metadata.create_all(get_engine())
+    engine = get_engine()
+    Base.metadata.create_all(engine)
+
+    # Lightweight column migrations for existing SQLite DBs
+    migrations = [
+        (
+            "fixtures",
+            "finished_provisional",
+            "ALTER TABLE fixtures ADD COLUMN finished_provisional "
+            "BOOLEAN DEFAULT 0",
+        ),
+    ]
+    with engine.begin() as conn:
+        for table, column, ddl in migrations:
+            rows = conn.execute(
+                text(f"PRAGMA table_info({table})")
+            ).fetchall()
+            cols = {r[1] for r in rows}
+            if column not in cols:
+                conn.execute(text(ddl))

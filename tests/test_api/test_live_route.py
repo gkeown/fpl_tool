@@ -304,13 +304,69 @@ async def test_live_gameweek_top_defcon(
 
     fix = resp.json()["fixtures"][0]
     top_defcon = fix["top_defcon"]
-    assert len(top_defcon) == 3
+    # Gabriel (DEF, 14 >= 10) and Dias (DEF, 10 >= 10) qualify.
+    # Saka (MID, 5 < 12) is filtered out — below MID threshold.
+    # Haaland (FWD, 3 < 12) also filtered out.
+    assert len(top_defcon) == 2
     assert top_defcon[0]["player"] == "Gabriel"
     assert top_defcon[0]["defcon"] == 14
     assert top_defcon[1]["player"] == "Dias"
     assert top_defcon[1]["defcon"] == 10
-    assert top_defcon[2]["player"] == "Saka"
-    assert top_defcon[2]["defcon"] == 5
+
+
+async def _mock_live_fetch_defcon_thresholds(gw: int) -> dict:
+    """Test DEFCON thresholds: DEF/GK >= 10, MID/FWD >= 12."""
+    return {
+        100: {  # Saka (MID): 12 DEFCON (meets threshold)
+            "stats": {"bps": 30},
+            "explain": [_explain_entry(500, defcon=12, points=5)],
+        },
+        101: {  # Gabriel (DEF): 9 DEFCON (below threshold)
+            "stats": {"bps": 25},
+            "explain": [_explain_entry(500, defcon=9, points=3)],
+        },
+        200: {  # Haaland (FWD): 11 DEFCON (below MID/FWD threshold)
+            "stats": {"bps": 20},
+            "explain": [_explain_entry(500, defcon=11, points=4)],
+        },
+        201: {  # Dias (DEF): 10 DEFCON (exactly meets DEF threshold)
+            "stats": {"bps": 15},
+            "explain": [_explain_entry(500, defcon=10, points=5)],
+        },
+    }
+
+
+async def test_live_gameweek_defcon_thresholds(
+    db_session: Session, _patch_db: None,
+) -> None:
+    """Only players meeting position-based DEFCON threshold qualify."""
+    _seed_gw(db_session)
+    live_mod._live_cache = {}
+
+    with patch("fpl.api.app.init_db"), \
+         patch(
+             "fpl.api.routes.live._fetch_live_gw_with_explain",
+             _mock_live_fetch_defcon_thresholds,
+         ):
+        from fpl.api.app import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.get("/api/live/gameweek?force=true")
+
+    fix = resp.json()["fixtures"][0]
+    top_defcon = fix["top_defcon"]
+    # Only Saka (MID, 12) and Dias (DEF, 10) qualify
+    # Gabriel (DEF, 9) below DEF threshold
+    # Haaland (FWD, 11) below MID/FWD threshold
+    assert len(top_defcon) == 2
+    players = {d["player"] for d in top_defcon}
+    assert "Saka" in players
+    assert "Dias" in players
+    assert "Gabriel" not in players
+    assert "Haaland" not in players
 
 
 def _seed_dgw(session: Session) -> None:

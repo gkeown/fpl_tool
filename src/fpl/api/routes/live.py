@@ -44,7 +44,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             {
                 "fpl_id": f.fpl_id,
                 "kickoff_time": f.kickoff_time,
-                "finished": f.finished,
+                "finished": f.finished or f.finished_provisional,
                 "team_h": f.team_h,
                 "team_a": f.team_a,
                 "team_h_score": f.team_h_score,
@@ -190,12 +190,22 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 }
             )
 
-        # Top 3 DEFCON
+        # Top DEFCON — only players who meet the scoring threshold:
+        # DEF/GK need >= 10 CBIT, MID/FWD need >= 12
+        def _meets_defcon(
+            element_type: int, defcon_value: int
+        ) -> bool:
+            threshold = 10 if element_type <= 2 else 12
+            return defcon_value >= threshold
+
         top_defcon_sorted = sorted(
             (
                 (p, stats)
                 for p, stats in fixture_players
-                if (stats.get("defensive_contribution", 0) or 0) > 0
+                if _meets_defcon(
+                    p["element_type"],
+                    stats.get("defensive_contribution", 0) or 0,
+                )
             ),
             key=lambda t: t[1].get("defensive_contribution", 0) or 0,
             reverse=True,
