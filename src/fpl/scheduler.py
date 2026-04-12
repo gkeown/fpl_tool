@@ -105,6 +105,24 @@ async def _score_refresh() -> None:
         logger.exception("Score cache refresh failed")
 
 
+async def _live_gw_refresh() -> None:
+    """Refresh live gameweek cache if within a score window.
+
+    Uses the wider score window (Fri-Mon evenings + Sat/Sun days) so
+    the live GW page stays fresh for Friday night and midweek fixtures.
+    """
+    if not _in_score_window():
+        return
+
+    try:
+        from fpl.api.routes.live import refresh_live_cache
+
+        await refresh_live_cache()
+        logger.info("Live GW cache refreshed")
+    except Exception:
+        logger.exception("Live GW cache refresh failed")
+
+
 def start_scheduler() -> None:
     """Start the background scheduler if auto_refresh is enabled."""
     global _scheduler
@@ -129,8 +147,17 @@ def start_scheduler() -> None:
         id="score_refresh",
         replace_existing=True,
     )
+    _scheduler.add_job(
+        _live_gw_refresh,
+        "interval",
+        seconds=60,
+        id="live_gw_refresh",
+        replace_existing=True,
+    )
     _scheduler.start()
-    logger.info("Scheduler started: FPL data every 60s, scores every 30s")
+    logger.info(
+        "Scheduler started: FPL data + live GW every 60s, scores every 30s"
+    )
 
 
 def stop_scheduler() -> None:

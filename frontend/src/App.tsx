@@ -14,6 +14,7 @@ import OpponentTeamPage from "./pages/OpponentTeamPage";
 import ScoresPage from "./pages/ScoresPage";
 import TablesPage from "./pages/TablesPage";
 import StatsPage from "./pages/StatsPage";
+import LiveGameweekPage from "./pages/LiveGameweekPage";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -37,6 +38,7 @@ const App = () => (
           <Route path="/scores" element={<ScoresPage />} />
           <Route path="/tables" element={<TablesPage />} />
           <Route path="/stats" element={<StatsPage />} />
+          <Route path="/live-gw" element={<LiveGameweekPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

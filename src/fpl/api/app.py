@@ -109,6 +109,7 @@ from fpl.api.routes import (  # noqa: E402
     data,
     fixtures,
     leagues,
+    live,
     players,
     predict,
     prices,
@@ -129,6 +130,7 @@ app.include_router(data.router, prefix="/api/data", tags=["data"])
 app.include_router(leagues.router, prefix="/api/leagues", tags=["leagues"])
 app.include_router(scores.router, prefix="/api/scores", tags=["scores"])
 app.include_router(stats.router, prefix="/api/stats", tags=["stats"])
+app.include_router(live.router, prefix="/api/live", tags=["live"])
 
 # Serve frontend static files if the build exists
 if _FRONTEND_DIR.is_dir():
