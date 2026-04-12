@@ -91,12 +91,15 @@ def _explain_entry(
     fixture: int,
     goals: int = 0,
     assists: int = 0,
-    bps: int = 0,
     bonus: int = 0,
     defcon: int = 0,
     points: int = 0,
 ) -> dict:
-    """Build an explain entry for a single fixture."""
+    """Build an explain entry for a single fixture.
+
+    Note: BPS is NOT included in explain entries in the real FPL API —
+    only point-awarding events are. BPS lives in top-level stats.
+    """
     stats = []
     if goals:
         stats.append(
@@ -106,8 +109,6 @@ def _explain_entry(
         stats.append(
             {"identifier": "assists", "value": assists, "points": assists * 3}
         )
-    if bps:
-        stats.append({"identifier": "bps", "value": bps, "points": 0})
     if bonus:
         stats.append({"identifier": "bonus", "value": bonus, "points": bonus})
     if defcon:
@@ -127,33 +128,33 @@ async def _mock_live_fetch(gw: int) -> dict:
     """Mock FPL live endpoint response (all players in fixture 500)."""
     return {
         100: {  # Saka: 2 goals, 60 BPS, 3 bonus, 5 DEFCON
-            "stats": {},
+            "stats": {"bps": 60},
             "explain": [
                 _explain_entry(
-                    500, goals=2, bps=60, bonus=3, defcon=5, points=15
+                    500, goals=2, bonus=3, defcon=5, points=15
                 )
             ],
         },
         101: {  # Gabriel: 1 assist, 35 BPS, 1 bonus, 14 DEFCON
-            "stats": {},
+            "stats": {"bps": 35},
             "explain": [
                 _explain_entry(
-                    500, assists=1, bps=35, bonus=1, defcon=14, points=8
+                    500, assists=1, bonus=1, defcon=14, points=8
                 )
             ],
         },
         200: {  # Haaland: 1 goal, 45 BPS, 2 bonus, 3 DEFCON
-            "stats": {},
+            "stats": {"bps": 45},
             "explain": [
                 _explain_entry(
-                    500, goals=1, bps=45, bonus=2, defcon=3, points=10
+                    500, goals=1, bonus=2, defcon=3, points=10
                 )
             ],
         },
         201: {  # Dias: 20 BPS, 10 DEFCON
-            "stats": {},
+            "stats": {"bps": 20},
             "explain": [
-                _explain_entry(500, bps=20, defcon=10, points=3)
+                _explain_entry(500, defcon=10, points=3)
             ],
         },
     }
@@ -387,23 +388,25 @@ def _seed_dgw(session: Session) -> None:
 async def _mock_live_fetch_dgw(gw: int) -> dict:
     """Mock DGW: Saka has TWO explain entries (one per fixture).
 
-    Goals/BPS/DEFCON must be attributed to the correct fixture.
+    Goals/assists/DEFCON/bonus must be attributed to the correct
+    fixture. BPS is top-level only (not fixture-splittable) and is
+    intentionally zeroed for DGW players.
     """
     return {
         100: {  # Saka: 1 goal in fix 500, 2 goals in fix 501
-            "stats": {},
+            "stats": {"bps": 85},  # aggregate across both matches
             "explain": [
-                _explain_entry(500, goals=1, bps=30, defcon=5, points=8),
-                _explain_entry(501, goals=2, bps=55, bonus=3, points=15),
+                _explain_entry(500, goals=1, defcon=5, points=8),
+                _explain_entry(501, goals=2, bonus=3, points=15),
             ],
         },
-        200: {  # Haaland: 0 goals in fix 500 only
-            "stats": {},
-            "explain": [_explain_entry(500, bps=20, points=2)],
+        200: {  # Haaland: fix 500 only
+            "stats": {"bps": 20},
+            "explain": [_explain_entry(500, points=2)],
         },
-        300: {  # Palmer: 1 goal in fix 501 only
-            "stats": {},
-            "explain": [_explain_entry(501, goals=1, bps=40, bonus=2, points=10)],
+        300: {  # Palmer: fix 501 only
+            "stats": {"bps": 40},
+            "explain": [_explain_entry(501, goals=1, bonus=2, points=10)],
         },
     }
 
@@ -447,16 +450,14 @@ async def test_live_gameweek_dgw_attribution(
     assert len(saka_501) == 2
     assert len(palmer_501) == 1
 
-    # BPS in fixture 500: Saka 30, Haaland 20
+    # BPS: Haaland's 20 in fix 500. Saka is DGW so bps=0 (excluded).
     fix_500_bps = fix_500["top_bps"]
-    assert fix_500_bps[0]["player"] == "Saka"
-    assert fix_500_bps[0]["bps"] == 30
-    assert fix_500_bps[1]["player"] == "Haaland"
-    assert fix_500_bps[1]["bps"] == 20
+    assert len(fix_500_bps) == 1
+    assert fix_500_bps[0]["player"] == "Haaland"
+    assert fix_500_bps[0]["bps"] == 20
 
-    # BPS in fixture 501: Saka 55 (not 85 aggregate!), Palmer 40
+    # Fixture 501: Palmer 40 (Saka excluded due to DGW)
     fix_501_bps = fix_501["top_bps"]
-    assert fix_501_bps[0]["player"] == "Saka"
-    assert fix_501_bps[0]["bps"] == 55
-    assert fix_501_bps[1]["player"] == "Palmer"
-    assert fix_501_bps[1]["bps"] == 40
+    assert len(fix_501_bps) == 1
+    assert fix_501_bps[0]["player"] == "Palmer"
+    assert fix_501_bps[0]["bps"] == 40

@@ -87,12 +87,16 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             status = "scheduled"
 
         # Collect players in this fixture from live data.
-        # For DGW correctness, parse per-fixture stats from the
-        # `explain[].stats` breakdown rather than the aggregated
-        # top-level stats dict.
+        # For DGW correctness, parse per-fixture stats from
+        # `explain[].stats` breakdown. Note that `bps` is NOT in the
+        # explain breakdown (only point-awarding events are), so we
+        # fall back to top-level `stats.bps` — correct for single-GW
+        # players, best-effort for the rare DGW case.
         fixture_players: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for pid, entry in live_raw.items():
             explain = entry.get("explain", [])
+            top_stats = entry.get("stats", {})
+
             # Find the explain entry for this specific fixture
             fix_explain = next(
                 (
@@ -113,13 +117,22 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 per_fix_stats[ident] = s.get("value", 0) or 0
                 per_fix_points += s.get("points", 0) or 0
 
+            # BPS isn't in explain — pull from top-level stats
+            # (accurate for single-fixture GW; DGW approximation)
+            is_single_fixture = len(explain) == 1
+            bps = (
+                top_stats.get("bps", 0) or 0
+                if is_single_fixture
+                else 0
+            )
+
             p = player_snapshots.get(pid)
             if p:
                 fixture_players.append(
                     (
                         p,
                         {
-                            "bps": per_fix_stats.get("bps", 0),
+                            "bps": bps,
                             "bonus": per_fix_stats.get("bonus", 0),
                             "goals_scored": per_fix_stats.get(
                                 "goals_scored", 0
