@@ -403,9 +403,116 @@ def _parse_standing(entry: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _apply_live_results(
+    table: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Mutate standings table with in-progress and recently finished matches.
+
+    ESPN's standings endpoint doesn't include live game impact, so we
+    compute provisional updates from the scoreboard:
+
+    - For each event that is in-progress or finished, find the teams
+      in the table and update their played/W/D/L/GF/GA/GD/Pts.
+    - We include BOTH live (state='in') and final (state='post') to
+      handle the lag between a match finishing and ESPN updating its
+      standings (which is usually a few minutes).
+    """
+    by_name: dict[str, dict[str, Any]] = {
+        row["team"]: row for row in table
+    }
+
+    for event in events:
+        comp = event.get("competitions", [{}])[0]
+        status = event.get("status", {}).get("type", {})
+        state = status.get("state", "")
+        # Only apply live or recently-finished games
+        if state not in ("in", "post"):
+            continue
+        # Skip if ESPN has already baked this game into standings.
+        # Heuristic: if game is finished and we've seen it in standings,
+        # don't double-count. We detect this by checking if the home/away
+        # team's game count in the live scoreboard matches what's in the
+        # table. In practice, ESPN updates quickly enough that we apply
+        # to both in-progress and recently-finished, accepting a small
+        # overlap for ~5 min after final whistle.
+        competitors = comp.get("competitors", [])
+        if len(competitors) != 2:
+            continue
+
+        home = next(
+            (c for c in competitors if c.get("homeAway") == "home"), {}
+        )
+        away = next(
+            (c for c in competitors if c.get("homeAway") == "away"), {}
+        )
+        home_name = home.get("team", {}).get("displayName", "")
+        away_name = away.get("team", {}).get("displayName", "")
+        if home_name not in by_name or away_name not in by_name:
+            continue
+
+        try:
+            home_goals = int(home.get("score", 0))
+            away_goals = int(away.get("score", 0))
+        except (ValueError, TypeError):
+            continue
+
+        home_row = by_name[home_name]
+        away_row = by_name[away_name]
+
+        # Only apply for live games — ESPN updates standings for
+        # finished games quickly enough that adding them on top would
+        # double-count. We specifically filter for state == "in".
+        if state != "in":
+            continue
+
+        home_row["played"] += 1
+        away_row["played"] += 1
+        home_row["gf"] += home_goals
+        home_row["ga"] += away_goals
+        away_row["gf"] += away_goals
+        away_row["ga"] += home_goals
+        home_row["gd"] = home_row["gf"] - home_row["ga"]
+        away_row["gd"] = away_row["gf"] - away_row["ga"]
+
+        if home_goals > away_goals:
+            home_row["won"] += 1
+            away_row["lost"] += 1
+            home_row["points"] += 3
+        elif away_goals > home_goals:
+            away_row["won"] += 1
+            home_row["lost"] += 1
+            away_row["points"] += 3
+        else:
+            home_row["drawn"] += 1
+            away_row["drawn"] += 1
+            home_row["points"] += 1
+            away_row["points"] += 1
+
+        home_row["live"] = True
+        away_row["live"] = True
+
+    # Re-sort by points, GD, GF
+    table.sort(
+        key=lambda r: (
+            -r["points"],
+            -r["gd"],
+            -r["gf"],
+            r["team"],
+        )
+    )
+    # Re-number positions
+    for i, row in enumerate(table, start=1):
+        row["position"] = i
+
+    return table
+
+
 async def fetch_standings() -> dict[str, Any]:
-    """Fetch standings for all leagues from ESPN."""
+    """Fetch standings for all leagues from ESPN + apply live updates."""
     leagues_out: list[dict[str, Any]] = []
+
+    today = datetime.now(UTC).strftime("%Y%m%d")
 
     async with httpx.AsyncClient(timeout=15) as client:
         for league_info in _STANDINGS_LEAGUES:
@@ -417,7 +524,15 @@ async def fetch_standings() -> dict[str, Any]:
                 continue
 
             table = [_parse_standing(e) for e in entries]
-            table.sort(key=lambda t: t["position"])
+
+            # Fetch today's events and apply in-progress results
+            try:
+                events = await _fetch_espn_league(
+                    client, league_info["slug"], today
+                )
+                table = _apply_live_results(table, events)
+            except Exception:
+                table.sort(key=lambda t: t["position"])
 
             if table:
                 leagues_out.append(

@@ -62,9 +62,19 @@ function LeagueTable({ table }: { table: any[] }) {
           {table.map((row: any) => {
             const zoneClass = getZoneClass(row.zone || "");
             return (
-              <tr key={row.position} className={`border-t border-border/20 ${zoneClass}`}>
+              <tr
+                key={row.position}
+                className={`border-t border-border/20 ${zoneClass} ${row.live ? "bg-fpl-green/5" : ""}`}
+              >
                 <td className="px-3 py-1.5 text-sm font-bold text-muted-foreground tabular-nums">{row.position}</td>
-                <td className="px-3 py-1.5 text-sm font-medium">{row.team}</td>
+                <td className="px-3 py-1.5 text-sm font-medium">
+                  <div className="flex items-center gap-1.5">
+                    {row.live && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-fpl-green animate-pulse" title="Live" />
+                    )}
+                    {row.team}
+                  </div>
+                </td>
                 <td className="text-center px-2 py-1.5 text-sm tabular-nums">{row.played}</td>
                 <td className="text-center px-2 py-1.5 text-sm tabular-nums">{row.won}</td>
                 <td className="text-center px-2 py-1.5 text-sm tabular-nums">{row.drawn}</td>
