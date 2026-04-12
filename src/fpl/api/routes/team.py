@@ -154,6 +154,13 @@ async def get_team() -> dict[str, Any]:
         live_bonus = live_stats.get("bonus", 0)
         live_defcon = live_stats.get("defensive_contribution", 0)
         live_minutes = live_stats.get("minutes", 0)
+        live_yellow = live_stats.get("yellow_cards", 0)
+        live_red = live_stats.get("red_cards", 0)
+        live_xgi = live_stats.get("expected_goal_involvements", "0.00")
+        try:
+            xgi_val = round(float(live_xgi), 2)
+        except (ValueError, TypeError):
+            xgi_val = 0.0
         event_pts = live_pts if live_pts is not None else p["event_points"]
         is_playing = p["fixture_live"] and live_minutes > 0
 
@@ -165,12 +172,14 @@ async def get_team() -> dict[str, Any]:
                 "position": position_str(p["element_type"]),
                 "cost": float(p["now_cost"]) / 10,
                 "selling_price": float(p["selling_price"]) / 10,
-                "form": float(p["form"]),
                 "opponent": p["opponent"],
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,
                 "defcon": live_defcon,
+                "yellow_cards": live_yellow,
+                "red_cards": live_red,
+                "xgi": xgi_val,
                 "minutes": live_minutes,
                 "is_playing": is_playing,
                 "fixture_live": p["fixture_live"],

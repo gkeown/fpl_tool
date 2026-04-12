@@ -188,7 +188,7 @@ async def test_get_team_player_fields(
     player = data["players"][0]
     expected_keys = {
         "id", "web_name", "team", "position", "cost", "selling_price",
-        "form", "opponent", "event_points", "gw_points", "status",
+        "opponent", "event_points", "gw_points", "status",
         "news", "is_starter", "squad_position", "is_captain",
         "is_vice_captain", "multiplier",
     }

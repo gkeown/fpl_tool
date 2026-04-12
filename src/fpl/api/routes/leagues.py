@@ -287,6 +287,17 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "defcon": live_stats.get(
                         "defensive_contribution", 0
                     ),
+                    "yellow_cards": live_stats.get("yellow_cards", 0),
+                    "red_cards": live_stats.get("red_cards", 0),
+                    "xgi": round(
+                        float(
+                            live_stats.get(
+                                "expected_goal_involvements", "0"
+                            )
+                            or 0
+                        ),
+                        2,
+                    ),
                     "minutes": live_stats.get("minutes", 0),
                     "is_playing": (
                         player.team_id in live_team_ids

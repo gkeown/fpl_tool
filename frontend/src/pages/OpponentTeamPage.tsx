@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
-import FormBadge from "@/components/FormBadge";
 import StatusBadge from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,10 +33,11 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
               <TableHead className="h-8 px-3 text-xs">Player</TableHead>
               <TableHead className="h-8 px-3 text-xs">Team</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">Cost</TableHead>
-              <TableHead className="h-8 px-3 text-xs text-right">Form</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">GW Pts</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">Bonus</TableHead>
               <TableHead className="h-8 px-3 text-xs text-right">DEFCON</TableHead>
+              <TableHead className="h-8 px-3 text-xs text-right">YC</TableHead>
+              <TableHead className="h-8 px-3 text-xs text-right">xGI</TableHead>
               <TableHead className="h-8 px-3 text-xs text-center">Opponent</TableHead>
               <TableHead className="h-8 px-3 text-xs text-center">Status</TableHead>
             </TableRow>
@@ -65,9 +65,6 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">{p.team}</TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">{'\u00A3'}{p.cost?.toFixed(1)}m</TableCell>
-                <TableCell className="px-3 py-1.5 text-right">
-                  <FormBadge value={p.form || 0} />
-                </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
                   <span className={`font-semibold ${((p.gw_points || p.event_points || 0)) >= 8 ? "text-fpl-green" : ""}`}>
                     {p.gw_points || p.event_points || 0}
@@ -79,6 +76,18 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                   </span>
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums text-muted-foreground">{p.defcon ?? 0}</TableCell>
+                <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums">
+                  {(p.red_cards || 0) > 0 ? (
+                    <span className="text-fpl-pink font-semibold">R</span>
+                  ) : (p.yellow_cards || 0) > 0 ? (
+                    <span className="text-fpl-gold font-semibold">{p.yellow_cards}</span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
+                </TableCell>
+                <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums text-muted-foreground">
+                  {(p.xgi || 0).toFixed(2)}
+                </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-center text-muted-foreground">
                   <div className="flex items-center justify-center gap-1">
                     <span>{p.opponent || "-"}</span>
