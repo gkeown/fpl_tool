@@ -24,8 +24,57 @@ from fpl.db.models import (
 router = APIRouter()
 
 
+def _compute_provisional_bonus(
+    players_by_bps: list[tuple[int, int]],
+) -> dict[int, int]:
+    """Compute provisional bonus points from BPS rankings.
+
+    Top 3 BPS get 3/2/1 bonus, handling ties per FPL rules:
+    - Tie for 1st (2 players): both get 3, next player gets 1
+    - Tie for 2nd (2 players): both get 2, no 3rd place bonus
+    - Tie for 1st (3+ players): all get 3
+
+    Args:
+        players_by_bps: list of (player_id, bps) tuples
+
+    Returns:
+        {player_id: bonus_points} for players earning 1, 2, or 3
+    """
+    sorted_players = sorted(
+        [(pid, bps) for pid, bps in players_by_bps if bps > 0],
+        key=lambda x: -x[1],
+    )
+    if not sorted_players:
+        return {}
+
+    result: dict[int, int] = {}
+    rank_points = [3, 2, 1]
+    i = 0
+    rank_idx = 0
+    n = len(sorted_players)
+    while i < n and rank_idx < 3:
+        cur_bps = sorted_players[i][1]
+        # Find all players tied at this BPS
+        tied: list[int] = [sorted_players[i][0]]
+        j = i + 1
+        while j < n and sorted_players[j][1] == cur_bps:
+            tied.append(sorted_players[j][0])
+            j += 1
+        points = rank_points[rank_idx]
+        for pid in tied:
+            result[pid] = points
+        rank_idx += len(tied)
+        i = j
+    return result
+
+
 async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
-    """Fetch live GW data from FPL API. Returns {player_id: stats}."""
+    """Fetch live GW data from FPL API. Returns {player_id: stats}.
+
+    Injects a `provisional_bonus` field into each player's stats
+    computed from the BPS ranking within their fixture. Used when
+    the match is in progress and the confirmed `bonus` field is 0.
+    """
     settings = get_settings()
     headers = {"User-Agent": settings.user_agent}
     try:
@@ -36,9 +85,43 @@ async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
+            elements = data.get("elements", [])
+
+            # Group players by fixture (via explain[0].fixture)
+            # DGW players contribute to the first fixture only; BPS
+            # rankings for DGW are fuzzy so provisional bonus there
+            # is approximate.
+            by_fixture: dict[int, list[tuple[int, int]]] = {}
+            player_fixture: dict[int, int] = {}
+            for el in elements:
+                pid = el["id"]
+                explain = el.get("explain", [])
+                if not explain:
+                    continue
+                fixture_id = explain[0].get("fixture")
+                if fixture_id is None:
+                    continue
+                bps = el.get("stats", {}).get("bps", 0) or 0
+                by_fixture.setdefault(fixture_id, []).append(
+                    (pid, bps)
+                )
+                player_fixture[pid] = fixture_id
+
+            # Compute provisional bonus per fixture
+            provisional: dict[int, int] = {}
+            for _fid, players in by_fixture.items():
+                provisional.update(
+                    _compute_provisional_bonus(players)
+                )
+
             return {
-                el["id"]: el.get("stats", {})
-                for el in data.get("elements", [])
+                el["id"]: {
+                    **el.get("stats", {}),
+                    "provisional_bonus": provisional.get(
+                        el["id"], 0
+                    ),
+                }
+                for el in elements
             }
     except Exception:
         return {}
@@ -151,7 +234,11 @@ async def get_team() -> dict[str, Any]:
         # Use live total_points and bonus if available
         live_stats = live_data.get(pid, {})
         live_pts = live_stats.get("total_points")
-        live_bonus = live_stats.get("bonus", 0)
+        confirmed_bonus = live_stats.get("bonus", 0) or 0
+        provisional_bonus = live_stats.get("provisional_bonus", 0) or 0
+        live_bonus = (
+            confirmed_bonus if confirmed_bonus > 0 else provisional_bonus
+        )
         live_defcon = live_stats.get("defensive_contribution", 0)
         live_minutes = live_stats.get("minutes", 0)
         live_yellow = live_stats.get("yellow_cards", 0)

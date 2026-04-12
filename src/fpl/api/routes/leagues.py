@@ -283,7 +283,11 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "opponent": opp_str,
                     "event_points": event_pts,
                     "gw_points": event_pts * multiplier,
-                    "gw_bonus": live_stats.get("bonus", 0),
+                    "gw_bonus": (
+                        live_stats.get("bonus", 0)
+                        or live_stats.get("provisional_bonus", 0)
+                        or 0
+                    ),
                     "defcon": live_stats.get(
                         "defensive_contribution", 0
                     ),
