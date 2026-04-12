@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
 import FormBadge from "@/components/FormBadge";
 import StatusBadge from "@/components/StatusBadge";
@@ -104,10 +105,13 @@ export default function OpponentTeamPage() {
   const { leagueId, entryId } = useParams<{ leagueId: string; entryId: string }>();
   const navigate = useNavigate();
 
+  const refetchInterval = useAutoRefreshInterval();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["leagueEntry", leagueId, entryId],
     queryFn: () => api.getLeagueEntry(Number(leagueId), Number(entryId)),
     enabled: !!leagueId && !!entryId,
+    refetchInterval,
+    refetchIntervalInBackground: true,
   });
 
   if (isLoading) {

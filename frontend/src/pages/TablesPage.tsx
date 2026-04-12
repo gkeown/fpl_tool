@@ -95,6 +95,7 @@ export default function TablesPage() {
     queryKey: ["standings"],
     queryFn: () => api.getStandings(),
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 
   const data = standings.data as any;

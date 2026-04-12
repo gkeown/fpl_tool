@@ -189,6 +189,7 @@ export default function ScoresPage() {
     queryKey: ["todayScores"],
     queryFn: () => api.getTodayScores(),
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 
   const data = scores.data as any;

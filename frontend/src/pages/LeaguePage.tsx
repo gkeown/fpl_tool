@@ -51,6 +51,7 @@ export default function LeaguePage() {
     queryFn: () => api.getLeagueStandings(activeLeagueId!),
     enabled: activeLeagueId != null,
     refetchInterval,
+    refetchIntervalInBackground: true,
   });
 
   const standingsData = standings.data as any;

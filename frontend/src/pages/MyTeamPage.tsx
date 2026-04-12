@@ -104,8 +104,18 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
 export default function MyTeamPage() {
   const qc = useQueryClient();
   const refetchInterval = useAutoRefreshInterval();
-  const team = useQuery({ queryKey: ["team"], queryFn: () => api.getTeam(), refetchInterval });
-  const analysis = useQuery({ queryKey: ["teamAnalysis"], queryFn: () => api.getTeamAnalysis(5), refetchInterval });
+  const team = useQuery({
+    queryKey: ["team"],
+    queryFn: () => api.getTeam(),
+    refetchInterval,
+    refetchIntervalInBackground: true,
+  });
+  const analysis = useQuery({
+    queryKey: ["teamAnalysis"],
+    queryFn: () => api.getTeamAnalysis(5),
+    refetchInterval,
+    refetchIntervalInBackground: true,
+  });
 
   const teamData = team.data as any;
   const analysisData = analysis.data as any;
@@ -123,22 +133,37 @@ export default function MyTeamPage() {
     );
   }
 
+  const lastUpdated = team.dataUpdatedAt
+    ? new Date(team.dataUpdatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : null;
+
   return (
     <div>
       <PageHeader
         title="My Team"
         actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              qc.invalidateQueries({ queryKey: ["team"] });
-              qc.invalidateQueries({ queryKey: ["teamAnalysis"] });
-            }}
-          >
-            <RotateCw className="h-4 w-4 mr-1" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {refetchInterval && (
+              <span className="flex items-center gap-1 text-xs text-fpl-green">
+                <span className="h-2 w-2 rounded-full bg-fpl-green animate-pulse" />
+                Auto-updating
+              </span>
+            )}
+            {lastUpdated && (
+              <span className="text-[10px] text-muted-foreground">{lastUpdated}</span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                qc.invalidateQueries({ queryKey: ["team"] });
+                qc.invalidateQueries({ queryKey: ["teamAnalysis"] });
+              }}
+            >
+              <RotateCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+          </div>
         }
       />
 
