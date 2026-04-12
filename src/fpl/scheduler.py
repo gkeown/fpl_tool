@@ -125,12 +125,12 @@ def start_scheduler() -> None:
     _scheduler.add_job(
         _score_refresh,
         "interval",
-        seconds=60,
+        seconds=30,
         id="score_refresh",
         replace_existing=True,
     )
     _scheduler.start()
-    logger.info("Scheduler started: FPL data + scores every 60s")
+    logger.info("Scheduler started: FPL data every 60s, scores every 30s")
 
 
 def stop_scheduler() -> None:

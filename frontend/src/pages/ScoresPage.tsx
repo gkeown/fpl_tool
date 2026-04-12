@@ -183,7 +183,7 @@ function LeagueSection({ league }: { league: any }) {
 export default function ScoresPage() {
   const qc = useQueryClient();
   const autoRefresh = useAutoRefresh();
-  const refetchInterval = useAutoRefreshInterval();
+  const refetchInterval = useAutoRefreshInterval(30_000);
 
   const scores = useQuery({
     queryKey: ["todayScores"],
