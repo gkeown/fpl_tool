@@ -106,13 +106,21 @@ export default function OpponentTeamPage() {
   const navigate = useNavigate();
 
   const refetchInterval = useAutoRefreshInterval();
-  const { data, isLoading, isError } = useQuery({
+  const entryQuery = useQuery({
     queryKey: ["leagueEntry", leagueId, entryId],
     queryFn: () => api.getLeagueEntry(Number(leagueId), Number(entryId)),
     enabled: !!leagueId && !!entryId,
     refetchInterval,
     refetchIntervalInBackground: true,
   });
+  const { data, isLoading, isError } = entryQuery;
+  const lastUpdated = entryQuery.dataUpdatedAt
+    ? new Date(entryQuery.dataUpdatedAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : null;
 
   if (isLoading) {
     return (
@@ -161,6 +169,19 @@ export default function OpponentTeamPage() {
       <PageHeader
         title={d.team_name || "Opponent Team"}
         subtitle={d.manager_name}
+        actions={
+          <div className="flex items-center gap-2">
+            {refetchInterval && (
+              <span className="flex items-center gap-1 text-xs text-fpl-green">
+                <span className="h-2 w-2 rounded-full bg-fpl-green animate-pulse" />
+                Auto-updating
+              </span>
+            )}
+            {lastUpdated && (
+              <span className="text-[10px] text-muted-foreground">{lastUpdated}</span>
+            )}
+          </div>
+        }
       />
 
       {/* Info badges */}

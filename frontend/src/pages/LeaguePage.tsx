@@ -56,10 +56,32 @@ export default function LeaguePage() {
 
   const standingsData = standings.data as any;
   const rows = standingsData?.standings ?? [];
+  const lastUpdated = standings.dataUpdatedAt
+    ? new Date(standings.dataUpdatedAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+    : null;
 
   return (
     <div>
-      <PageHeader title="Leagues" />
+      <PageHeader
+        title="Leagues"
+        actions={
+          <div className="flex items-center gap-2">
+            {refetchInterval && (
+              <span className="flex items-center gap-1 text-xs text-fpl-green">
+                <span className="h-2 w-2 rounded-full bg-fpl-green animate-pulse" />
+                Auto-updating
+              </span>
+            )}
+            {lastUpdated && (
+              <span className="text-[10px] text-muted-foreground">{lastUpdated}</span>
+            )}
+          </div>
+        }
+      />
 
       {/* Add League */}
       <Card className="card-stripe mb-6">
