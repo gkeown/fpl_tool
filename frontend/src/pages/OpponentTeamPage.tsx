@@ -74,7 +74,7 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums text-muted-foreground">{p.defcon ?? 0}</TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-center text-muted-foreground">{p.opponent || "-"}</TableCell>
                 <TableCell className="px-3 py-1.5 text-center">
-                  <StatusBadge status={p.status || "a"} />
+                  <StatusBadge status={p.status || "a"} chanceOfPlaying={p.chance_of_playing} />
                 </TableCell>
               </TableRow>
             ))}

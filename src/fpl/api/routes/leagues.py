@@ -278,6 +278,7 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                         "defensive_contribution", 0
                     ),
                     "status": player.status,
+                    "chance_of_playing": player.chance_of_playing_next,
                     "news": player.news,
                     "is_starter": pick["position"] <= 11,
                     "squad_position": pick["position"],

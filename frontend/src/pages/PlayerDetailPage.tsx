@@ -90,7 +90,7 @@ export default function PlayerDetailPage() {
           <Badge className="bg-muted text-foreground">{p.position}</Badge>
           <Badge variant="outline">{'\u00A3'}{parseFloat(p.cost) || 0}m</Badge>
           <FormBadge value={parseFloat(p.form) || 0} />
-          <StatusBadge status={p.status || "a"} />
+          <StatusBadge status={p.status || "a"} chanceOfPlaying={p.chance_of_playing} />
         </div>
         {p.news && (
           <Alert className="mt-3 border-fpl-gold/30 bg-fpl-gold/5">

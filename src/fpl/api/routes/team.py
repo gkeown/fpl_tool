@@ -105,6 +105,7 @@ async def get_team() -> dict[str, Any]:
                         else "-"
                     ),
                     "status": player.status,
+                    "chance_of_playing": player.chance_of_playing_next,
                     "news": player.news,
                     "position": mtp.position,
                     "is_captain": mtp.is_captain,
@@ -154,6 +155,7 @@ async def get_team() -> dict[str, Any]:
                 "gw_bonus": live_bonus,
                 "defcon": live_defcon,
                 "status": p["status"],
+                "chance_of_playing": p["chance_of_playing"],
                 "news": p["news"],
                 "is_starter": p["position"] <= 11,
                 "squad_position": p["position"],
