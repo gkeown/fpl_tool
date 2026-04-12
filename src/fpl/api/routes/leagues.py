@@ -197,7 +197,7 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             p.fpl_id: (p, t) for p, t in player_rows
         }
 
-        # Build opponent lookup from current GW fixtures
+        # Build opponent + live fixture lookup from current GW fixtures
         all_teams = {
             t.fpl_id: t.short_name
             for t in session.query(Team).all()
@@ -207,7 +207,9 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             .filter(Fixture.gameweek == current_gw_db)
             .all()
         )
+        now_iso = datetime.now(UTC).isoformat()
         opponent_lookup: dict[int, tuple[str, bool]] = {}
+        live_team_ids: set[int] = set()
         for fix in gw_fixtures:
             opponent_lookup[fix.team_h] = (
                 all_teams.get(fix.team_a, "?"),
@@ -217,6 +219,13 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                 all_teams.get(fix.team_h, "?"),
                 False,
             )
+            if (
+                fix.kickoff_time
+                and fix.kickoff_time <= now_iso
+                and not fix.finished
+            ):
+                live_team_ids.add(fix.team_h)
+                live_team_ids.add(fix.team_a)
 
         # Resolve transfer player names
         all_transfer_pids: set[int] = set()
@@ -277,6 +286,12 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                     "defcon": live_stats.get(
                         "defensive_contribution", 0
                     ),
+                    "minutes": live_stats.get("minutes", 0),
+                    "is_playing": (
+                        player.team_id in live_team_ids
+                        and live_stats.get("minutes", 0) > 0
+                    ),
+                    "fixture_live": player.team_id in live_team_ids,
                     "status": player.status,
                     "chance_of_playing": player.chance_of_playing_next,
                     "news": player.news,

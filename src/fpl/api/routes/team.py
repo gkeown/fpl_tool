@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -64,15 +65,18 @@ async def get_team() -> dict[str, Any]:
         current_gw = get_current_gameweek(session)
         account: MyAccount | None = session.get(MyAccount, 1)
 
-        # Build opponent lookup from current GW fixtures
+        # Build opponent + live fixture lookup from current GW fixtures
         all_teams = {t.fpl_id: t.short_name for t in session.query(Team).all()}
         gw_fixtures: list[Fixture] = (
             session.query(Fixture)
             .filter(Fixture.gameweek == current_gw)
             .all()
         )
+        now_iso = datetime.now(UTC).isoformat()
         # team_id -> (opponent_short_name, is_home)
         opponent_lookup: dict[int, tuple[str, bool]] = {}
+        # team_id -> True if their fixture is currently in progress
+        live_team_ids: set[int] = set()
         for fix in gw_fixtures:
             opponent_lookup[fix.team_h] = (
                 all_teams.get(fix.team_a, "?"),
@@ -82,17 +86,27 @@ async def get_team() -> dict[str, Any]:
                 all_teams.get(fix.team_h, "?"),
                 False,
             )
+            # Fixture is live if kickoff passed and not finished
+            if (
+                fix.kickoff_time
+                and fix.kickoff_time <= now_iso
+                and not fix.finished
+            ):
+                live_team_ids.add(fix.team_h)
+                live_team_ids.add(fix.team_a)
 
         # Snapshot DB data while session is open
         db_players: list[dict[str, Any]] = []
         for mtp, player, tm in rows:
             opp = opponent_lookup.get(player.team_id)
+            fixture_live = player.team_id in live_team_ids
             db_players.append(
                 {
                     "fpl_id": player.fpl_id,
                     "web_name": player.web_name,
                     "team_short": tm.short_name,
                     "team_id": player.team_id,
+                    "fixture_live": fixture_live,
                     "element_type": player.element_type,
                     "now_cost": player.now_cost,
                     "selling_price": mtp.selling_price,
@@ -138,7 +152,9 @@ async def get_team() -> dict[str, Any]:
         live_pts = live_stats.get("total_points")
         live_bonus = live_stats.get("bonus", 0)
         live_defcon = live_stats.get("defensive_contribution", 0)
+        live_minutes = live_stats.get("minutes", 0)
         event_pts = live_pts if live_pts is not None else p["event_points"]
+        is_playing = p["fixture_live"] and live_minutes > 0
 
         players_out.append(
             {
@@ -154,6 +170,9 @@ async def get_team() -> dict[str, Any]:
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,
                 "defcon": live_defcon,
+                "minutes": live_minutes,
+                "is_playing": is_playing,
+                "fixture_live": p["fixture_live"],
                 "status": p["status"],
                 "chance_of_playing": p["chance_of_playing"],
                 "news": p["news"],

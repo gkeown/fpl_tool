@@ -43,10 +43,16 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
           </TableHeader>
           <TableBody>
             {players.map((p: any) => (
-              <TableRow key={p.id} className={`border-b border-border/20 ${p.is_captain ? "bg-fpl-green/5" : ""}`}>
+              <TableRow
+                key={p.id}
+                className={`border-b border-border/20 ${p.is_captain ? "bg-fpl-green/5" : ""} ${p.is_playing ? "border-l-2 border-l-fpl-green" : ""}`}
+              >
                 <TableCell className="px-3 py-1.5 text-sm">{p.position}</TableCell>
                 <TableCell className="px-3 py-1.5 text-sm">
                   <div className="flex items-center gap-1.5">
+                    {p.is_playing && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-fpl-green animate-pulse" title="Playing" />
+                    )}
                     <span className="font-medium">{p.web_name}</span>
                     {p.is_captain && (
                       <span className="inline-flex items-center justify-center h-4 w-4 rounded-full bg-fpl-green text-[9px] font-bold text-black">C</span>
@@ -72,7 +78,16 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                   </span>
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-right tabular-nums text-muted-foreground">{p.defcon ?? 0}</TableCell>
-                <TableCell className="px-3 py-1.5 text-sm text-center text-muted-foreground">{p.opponent || "-"}</TableCell>
+                <TableCell className="px-3 py-1.5 text-sm text-center text-muted-foreground">
+                  <div className="flex items-center justify-center gap-1">
+                    <span>{p.opponent || "-"}</span>
+                    {p.is_playing && (
+                      <span className="text-[10px] text-fpl-green font-semibold tabular-nums">
+                        {p.minutes}'
+                      </span>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="px-3 py-1.5 text-center">
                   <StatusBadge status={p.status || "a"} chanceOfPlaying={p.chance_of_playing} />
                 </TableCell>
