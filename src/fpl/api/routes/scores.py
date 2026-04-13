@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from fpl.config import get_settings
 
@@ -576,3 +576,185 @@ async def get_standings(force: bool = False) -> dict[str, Any]:
     _standings_cache_updated_at = datetime.now(UTC).isoformat()
 
     return {**result, "cached_at": _standings_cache_updated_at}
+
+
+# ---------------------------------------------------------------------------
+# Match detail (ESPN summary endpoint)
+# ---------------------------------------------------------------------------
+
+
+def _parse_team_stats(
+    team_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Parse a single team's stats block from ESPN boxscore."""
+    team_info = team_data.get("team", {})
+    stats: dict[str, Any] = {}
+    for s in team_data.get("statistics", []):
+        name = s.get("name", "")
+        display = s.get("displayValue", "")
+        if name:
+            stats[name] = display
+    return {
+        "name": team_info.get("displayName", ""),
+        "short": team_info.get("abbreviation", ""),
+        "logo": team_info.get("logo", ""),
+        "home_away": team_data.get("homeAway", ""),
+        "stats": stats,
+    }
+
+
+def _parse_roster(
+    roster_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Parse a team's roster into starters/subs."""
+    team_info = roster_data.get("team", {})
+    starters: list[dict[str, Any]] = []
+    subs: list[dict[str, Any]] = []
+    for entry in roster_data.get("roster", []):
+        athlete = entry.get("athlete", {})
+        position = entry.get("position", {})
+        player: dict[str, Any] = {
+            "name": athlete.get("displayName", ""),
+            "short_name": athlete.get("shortName", ""),
+            "jersey": entry.get("jersey", ""),
+            "position": position.get("abbreviation", ""),
+            "subbed_in": entry.get("subbedIn", {}).get("didSub", False)
+            if isinstance(entry.get("subbedIn"), dict)
+            else False,
+            "subbed_out": entry.get("subbedOut", {}).get("didSub", False)
+            if isinstance(entry.get("subbedOut"), dict)
+            else False,
+        }
+        if entry.get("starter"):
+            starters.append(player)
+        else:
+            subs.append(player)
+    return {
+        "team": team_info.get("displayName", ""),
+        "short": team_info.get("abbreviation", ""),
+        "starters": starters,
+        "subs": subs,
+    }
+
+
+def _parse_key_events(
+    events: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Parse key events (goals, cards, subs) for the timeline."""
+    result: list[dict[str, Any]] = []
+    for ev in events:
+        clock = ev.get("clock", {})
+        result.append(
+            {
+                "minute": clock.get("displayValue", ""),
+                "type": ev.get("type", {}).get("text", ""),
+                "text": ev.get("text", ""),
+                "scoring_play": ev.get("scoringPlay", False),
+            }
+        )
+    return result
+
+
+@router.get("/match/{fixture_id}")
+async def get_match_detail(
+    fixture_id: str, league: str = "eng.1"
+) -> dict[str, Any]:
+    """Return detailed match data for an ESPN fixture.
+
+    Pulls from ESPN's /{league}/summary?event={id} endpoint which
+    includes boxscore (team stats), rosters (starters/subs), and
+    keyEvents (goals/cards/subs timeline).
+    """
+    url = f"{_ESPN_BASE}/{league}/summary"
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            resp = await client.get(
+                url, params={"event": fixture_id}
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to fetch match {fixture_id}: {exc}",
+            ) from exc
+
+    # Header (scoreline + status)
+    header = data.get("header", {})
+    competition = (header.get("competitions") or [{}])[0]
+    competitors = competition.get("competitors", [])
+    home_comp = next(
+        (c for c in competitors if c.get("homeAway") == "home"), {}
+    )
+    away_comp = next(
+        (c for c in competitors if c.get("homeAway") == "away"), {}
+    )
+
+    status_obj = competition.get("status", {})
+    status_type = status_obj.get("type", {})
+
+    # Box score stats
+    boxscore_teams = data.get("boxscore", {}).get("teams", [])
+    home_stats = None
+    away_stats = None
+    for t in boxscore_teams:
+        parsed = _parse_team_stats(t)
+        if parsed["home_away"] == "home":
+            home_stats = parsed
+        else:
+            away_stats = parsed
+
+    # Rosters
+    rosters = data.get("rosters", [])
+    home_roster = None
+    away_roster = None
+    for r in rosters:
+        parsed = _parse_roster(r)
+        if r.get("homeAway") == "home":
+            home_roster = parsed
+        else:
+            away_roster = parsed
+
+    # Key events
+    key_events = _parse_key_events(data.get("keyEvents", []))
+
+    # Venue
+    game_info = data.get("gameInfo", {})
+    venue = game_info.get("venue", {})
+
+    return {
+        "fixture_id": fixture_id,
+        "league": league,
+        "status": {
+            "state": status_type.get("state", ""),
+            "name": status_type.get("name", ""),
+            "description": status_type.get("description", ""),
+            "display_clock": status_obj.get("displayClock", ""),
+            "period": status_obj.get("period", 0),
+        },
+        "home": {
+            "name": home_comp.get("team", {}).get("displayName", ""),
+            "short": home_comp.get("team", {}).get(
+                "abbreviation", ""
+            ),
+            "logo": home_comp.get("team", {}).get("logo", ""),
+            "score": home_comp.get("score", "0"),
+            "stats": home_stats["stats"] if home_stats else {},
+            "roster": home_roster
+            or {"starters": [], "subs": [], "team": "", "short": ""},
+        },
+        "away": {
+            "name": away_comp.get("team", {}).get("displayName", ""),
+            "short": away_comp.get("team", {}).get(
+                "abbreviation", ""
+            ),
+            "logo": away_comp.get("team", {}).get("logo", ""),
+            "score": away_comp.get("score", "0"),
+            "stats": away_stats["stats"] if away_stats else {},
+            "roster": away_roster
+            or {"starters": [], "subs": [], "team": "", "short": ""},
+        },
+        "events": key_events,
+        "venue": venue.get("fullName", ""),
+        "attendance": game_info.get("attendance"),
+    }

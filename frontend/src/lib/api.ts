@@ -403,6 +403,8 @@ export const api = {
     return get<ScoresResponse>(`/scores/today${q}`);
   },
   getStandings: () => get<unknown>('/scores/standings'),
+  getMatchDetail: (leagueSlug: string, fixtureId: string) =>
+    get<unknown>(`/scores/match/${fixtureId}?league=${leagueSlug}`),
   getLiveGameweek: () => get<unknown>('/live/gameweek'),
 
   // Player Stats

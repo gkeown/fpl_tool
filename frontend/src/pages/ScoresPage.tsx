@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/lib/api";
 import { useAutoRefresh, useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
@@ -92,7 +93,8 @@ function RedCardList({ cards, align }: { cards: any[]; align: "left" | "right" }
   );
 }
 
-function MatchCard({ match }: { match: any }) {
+function MatchCard({ match, leagueId }: { match: any; leagueId: string }) {
+  const navigate = useNavigate();
   const isLive = ["1H", "2H", "ET"].includes(match.status);
   const hasStarted = match.status !== "NS" && match.status !== "TBD";
   const kickoffTime = match.kickoff
@@ -111,7 +113,10 @@ function MatchCard({ match }: { match: any }) {
   const awayReds = redCards.filter((e: any) => e.team === match.away_team);
 
   return (
-    <Card className={`mb-2 overflow-hidden ${isLive ? "border-fpl-green/30" : ""}`}>
+    <Card
+      className={`mb-2 overflow-hidden cursor-pointer transition-colors hover:bg-fpl-green/5 ${isLive ? "border-fpl-green/30" : ""}`}
+      onClick={() => navigate(`/match/${leagueId}/${match.fixture_id}`)}
+    >
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
           <MatchStatusBadge status={match.status} elapsed={match.elapsed} />
@@ -174,7 +179,7 @@ function LeagueSection({ league }: { league: any }) {
         {league.name}
       </h3>
       {league.matches.map((m: any) => (
-        <MatchCard key={m.fixture_id} match={m} />
+        <MatchCard key={m.fixture_id} match={m} leagueId={league.id} />
       ))}
     </div>
   );
