@@ -21,7 +21,7 @@ _FRONTEND_DIR = Path(
 
 
 async def _auto_setup() -> None:
-    """Load team + leagues from env config if not already in DB."""
+    """Load team + leagues from env config, refresh FPL data on startup."""
     import logging
 
     from fpl.config import get_settings
@@ -30,6 +30,17 @@ async def _auto_setup() -> None:
 
     logger = logging.getLogger(__name__)
     settings = get_settings()
+
+    # Always refresh FPL core data on startup (players, fixtures, flags)
+    # so a fresh container or restart picks up the latest status/finished
+    # flags for any matches that ended while offline.
+    logger.info("Running FPL data refresh on startup...")
+    try:
+        from fpl.api.routes.data import refresh
+
+        await refresh(source="fpl", force=True)
+    except Exception:
+        logger.exception("Startup FPL refresh failed")
 
     # Auto-load team if FPL_ID is set and no team is stored
     if settings.id:
@@ -40,15 +51,6 @@ async def _auto_setup() -> None:
                 needs_load = True
 
         if needs_load:
-            # Refresh core data first so player table is populated
-            logger.info("Running initial data refresh...")
-            try:
-                from fpl.api.routes.data import refresh
-
-                await refresh(source="fpl", force=True)
-            except Exception:
-                logger.exception("Initial data refresh failed")
-
             logger.info("Auto-loading team %d from FPL_ID", settings.id)
             try:
                 from fpl.api.routes.team import login
@@ -56,6 +58,15 @@ async def _auto_setup() -> None:
                 await login(settings.id)
             except Exception:
                 logger.exception("Auto-load team failed")
+        else:
+            # Team already loaded — refresh picks/chips/account data
+            logger.info("Refreshing existing team data...")
+            try:
+                from fpl.api.routes.data import refresh
+
+                await refresh(source="team", force=True)
+            except Exception:
+                logger.exception("Team refresh failed")
 
     # Auto-subscribe leagues from FPL_LEAGUE_IDS
     if settings.league_ids.strip():

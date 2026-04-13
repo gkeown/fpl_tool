@@ -88,8 +88,17 @@ def test_saturday_all_day_is_score_window() -> None:
         assert _in_window(_SCORE_WINDOWS) is True
 
 
-def test_saturday_late_night_is_not_score_window() -> None:
-    dt = _make_dt(5, 23)
+def test_saturday_late_evening_still_in_score_window() -> None:
+    """Window now extends until 23:00 to catch late KOs."""
+    dt = _make_dt(5, 22, 30)
+    with patch("fpl.scheduler.datetime") as mock_dt:
+        mock_dt.now.return_value = dt
+        assert _in_window(_SCORE_WINDOWS) is True
+
+
+def test_saturday_past_23_is_not_score_window() -> None:
+    """But 23:30 is still outside."""
+    dt = _make_dt(5, 23, 30)
     with patch("fpl.scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = dt
         assert _in_window(_SCORE_WINDOWS) is False

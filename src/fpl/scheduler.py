@@ -30,17 +30,19 @@ _UK = ZoneInfo("Europe/London")
 
 # FPL data refresh windows: (day_of_week, start_time, end_time)
 # Monday=0 .. Sunday=6
+# Widened to cover evening kickoffs and post-match flag updates
 _MATCH_WINDOWS: list[tuple[int, time, time]] = [
-    (5, time(12, 30), time(19, 30)),  # Saturday
-    (6, time(12, 0), time(18, 30)),   # Sunday
-    (0, time(20, 0), time(22, 30)),   # Monday
+    (4, time(19, 0), time(23, 0)),    # Friday evening
+    (5, time(12, 0), time(23, 0)),    # Saturday — covers late KO
+    (6, time(12, 0), time(23, 0)),    # Sunday — covers 20:00 KO
+    (0, time(19, 0), time(23, 0)),    # Monday evening
 ]
 
-# Score refresh windows (wider, covers all European leagues)
+# Score refresh windows (same as match windows now — unified)
 _SCORE_WINDOWS: list[tuple[int, time, time]] = [
     (4, time(19, 0), time(23, 0)),    # Friday evening
-    (5, time(12, 0), time(22, 0)),    # Saturday
-    (6, time(12, 0), time(22, 0)),    # Sunday
+    (5, time(12, 0), time(23, 0)),    # Saturday
+    (6, time(12, 0), time(23, 0)),    # Sunday
     (0, time(19, 0), time(23, 0)),    # Monday evening
 ]
 
