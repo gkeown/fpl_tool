@@ -155,6 +155,38 @@ async def get_team() -> dict[str, Any]:
             .filter(Fixture.gameweek == current_gw)
             .all()
         )
+
+        # Next 5 fixtures per team (GW+1 onwards)
+        future_fixtures: list[Fixture] = (
+            session.query(Fixture)
+            .filter(Fixture.gameweek > current_gw)
+            .order_by(Fixture.gameweek, Fixture.kickoff_time)
+            .all()
+        )
+        # team_id -> list of fixture dicts (opponent, is_home, fdr, gw)
+        next_fixtures_by_team: dict[int, list[dict[str, Any]]] = {}
+        for fix in future_fixtures:
+            home_entry = {
+                "gw": fix.gameweek,
+                "opponent": all_teams.get(fix.team_a, "?"),
+                "is_home": True,
+                "fdr": fix.team_h_difficulty,
+            }
+            away_entry = {
+                "gw": fix.gameweek,
+                "opponent": all_teams.get(fix.team_h, "?"),
+                "is_home": False,
+                "fdr": fix.team_a_difficulty,
+            }
+            next_fixtures_by_team.setdefault(fix.team_h, []).append(
+                home_entry
+            )
+            next_fixtures_by_team.setdefault(fix.team_a, []).append(
+                away_entry
+            )
+        # Limit to 5 per team
+        for tid in next_fixtures_by_team:
+            next_fixtures_by_team[tid] = next_fixtures_by_team[tid][:5]
         now_iso = datetime.now(UTC).isoformat()
         # team_id -> (opponent_short_name, is_home)
         opponent_lookup: dict[int, tuple[str, bool]] = {}
@@ -201,6 +233,9 @@ async def get_team() -> dict[str, Any]:
                         f"{opp[0]} (H)" if opp and opp[1]
                         else f"{opp[0]} (A)" if opp
                         else "-"
+                    ),
+                    "next_fixtures": next_fixtures_by_team.get(
+                        player.team_id, []
                     ),
                     "status": player.status,
                     "chance_of_playing": player.chance_of_playing_next,
@@ -260,6 +295,7 @@ async def get_team() -> dict[str, Any]:
                 "cost": float(p["now_cost"]) / 10,
                 "selling_price": float(p["selling_price"]) / 10,
                 "opponent": p["opponent"],
+                "next_fixtures": p["next_fixtures"],
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,

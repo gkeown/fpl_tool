@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { useAutoRefreshInterval } from "@/hooks/use-auto-refresh";
 import PageHeader from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
+import { fdrBg, fdrTextColor } from "@/components/FDRBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,6 +111,90 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
   );
 }
 
+function NextFixturesTable({ players }: { players: any[] }) {
+  // Determine the max number of fixtures shown (usually 5)
+  const maxFixtures = Math.max(
+    0,
+    ...players.map((p) => (p.next_fixtures || []).length),
+  );
+  const fixtureColumns = Array.from({ length: maxFixtures });
+
+  return (
+    <Card className="mb-4">
+      <CardHeader className="py-3 px-4">
+        <CardTitle className="text-sm font-sans font-semibold uppercase tracking-widest text-muted-foreground">
+          Next {maxFixtures} Fixtures
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-b border-border/50 bg-muted/20 hover:bg-muted/20">
+              <TableHead className="h-8 px-3 text-xs">Pos</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Player</TableHead>
+              <TableHead className="h-8 px-3 text-xs">Team</TableHead>
+              {fixtureColumns.map((_, i) => (
+                <TableHead
+                  key={i}
+                  className="h-8 px-2 text-xs text-center"
+                >
+                  +{i + 1}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {players.map((p: any) => {
+              const nf = (p.next_fixtures || []) as any[];
+              return (
+                <TableRow
+                  key={p.id}
+                  className={`border-b border-border/20 ${p.is_captain ? "bg-fpl-green/5" : ""} ${p.is_starter ? "" : "opacity-70"}`}
+                >
+                  <TableCell className="px-3 py-1.5 text-sm">{p.position}</TableCell>
+                  <TableCell className="px-3 py-1.5 text-sm font-medium">{p.web_name}</TableCell>
+                  <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">{p.team}</TableCell>
+                  {fixtureColumns.map((_, i) => {
+                    const fx = nf[i];
+                    if (!fx) {
+                      return (
+                        <TableCell
+                          key={i}
+                          className="px-2 py-1.5 text-xs text-center text-muted-foreground"
+                        >
+                          -
+                        </TableCell>
+                      );
+                    }
+                    const fdr = fx.fdr || 3;
+                    return (
+                      <TableCell
+                        key={i}
+                        className="px-2 py-1.5 text-center"
+                      >
+                        <span
+                          className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                          style={{
+                            backgroundColor: fdrBg(fdr),
+                            color: fdrTextColor(fdr),
+                          }}
+                        >
+                          {fx.is_home ? "" : "@"}{fx.opponent}
+                        </span>
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+
 export default function MyTeamPage() {
   const qc = useQueryClient();
   const refetchInterval = useAutoRefreshInterval();
@@ -213,6 +298,10 @@ export default function MyTeamPage() {
 
       {starters.length > 0 && <PlayerTable players={starters} title="Starting XI" />}
       {bench.length > 0 && <PlayerTable players={bench} title="Bench" dimmed />}
+
+      {teamData?.players && teamData.players.length > 0 && (
+        <NextFixturesTable players={teamData.players} />
+      )}
 
       {analysisData?.weak_spots && analysisData.weak_spots.length > 0 && (
         <div className="mt-4 space-y-2">
