@@ -169,12 +169,6 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
             await run_projections_ingest(session)
 
     async def _run_team() -> None:
-        with get_session() as session:
-            account: MyAccount | None = session.get(MyAccount, 1)
-            team_id = account.fpl_team_id if account else None
-        if team_id is None:
-            raise ValueError("No team loaded — load one via Settings first")
-
         import json
 
         from fpl.config import get_settings
@@ -185,48 +179,86 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
             upsert_my_team,
         )
 
+        # Refresh ALL users' teams
+        with get_session() as session:
+            accounts = session.query(MyAccount).all()
+            user_teams = [
+                (a.user_id, a.fpl_team_id)
+                for a in accounts
+                if a.fpl_team_id
+            ]
+
+        if not user_teams:
+            raise ValueError("No teams loaded")
+
         started = _now_utc()
         settings = get_settings()
         headers = {"User-Agent": settings.user_agent}
+        total = 0
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            entry = await fetch_entry(client, settings, team_id)
-            current_gw = entry.get("current_event", 1)
-            picks = await fetch_entry_picks(
-                client, settings, team_id, current_gw
-            )
-            history = await fetch_entry_history(
-                client, settings, team_id
-            )
-            with get_session() as session:
-                count = upsert_my_team(session, team_id, entry, picks)
-                # Store chips + active chip
-                account = session.get(MyAccount, 1)
-                if account:
-                    chips = history.get("chips", [])
-                    account.chips_json = json.dumps(chips)
-                    account.active_chip = picks.get("active_chip")
-                session.add(
-                    IngestLog(
-                        source="team",
-                        status="success",
-                        records_upserted=count,
-                        started_at=started,
-                        finished_at=_now_utc(),
+            for uid, team_id in user_teams:
+                try:
+                    entry = await fetch_entry(
+                        client, settings, team_id
                     )
+                    current_gw = entry.get("current_event", 1)
+                    picks = await fetch_entry_picks(
+                        client, settings, team_id, current_gw
+                    )
+                    history = await fetch_entry_history(
+                        client, settings, team_id
+                    )
+                    with get_session() as session:
+                        count = upsert_my_team(
+                            session, team_id, entry, picks,
+                            user_id=uid,
+                        )
+                        total += count
+                        account = (
+                            session.query(MyAccount)
+                            .filter(MyAccount.user_id == uid)
+                            .first()
+                        )
+                        if account:
+                            chips = history.get("chips", [])
+                            account.chips_json = json.dumps(chips)
+                            account.active_chip = picks.get(
+                                "active_chip"
+                            )
+                except Exception:
+                    pass
+
+        with get_session() as session:
+            session.add(
+                IngestLog(
+                    source="team",
+                    status="success",
+                    records_upserted=total,
+                    started_at=started,
+                    finished_at=_now_utc(),
                 )
+            )
 
     async def _run_leagues() -> None:
         from fpl.config import get_settings as _get_settings
         from fpl.ingest.leagues import fetch_league_standings, upsert_league
 
+        # Collect all leagues with their user_id for multi-tenant refresh
         with get_session() as session:
             leagues = session.query(League).all()
-            league_ids = [lg.league_id for lg in leagues]
+            league_rows = [
+                (lg.league_id, lg.user_id) for lg in leagues
+            ]
 
-        if not league_ids:
+        if not league_rows:
             return
+
+        # Deduplicate by FPL league_id (avoid fetching same league twice)
+        seen_fpl_ids: dict[int, list[int]] = {}
+        for fpl_lid, uid in league_rows:
+            seen_fpl_ids.setdefault(fpl_lid, []).append(uid)
 
         started = _now_utc()
         settings = _get_settings()
@@ -235,10 +267,15 @@ async def refresh(source: str = "all", force: bool = False) -> dict[str, str]:
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            for lid in league_ids:
-                data = await fetch_league_standings(client, settings, lid)
-                with get_session() as session:
-                    total += upsert_league(session, lid, data)
+            for fpl_lid, user_ids in seen_fpl_ids.items():
+                data = await fetch_league_standings(
+                    client, settings, fpl_lid
+                )
+                for uid in user_ids:
+                    with get_session() as session:
+                        total += upsert_league(
+                            session, fpl_lid, data, user_id=uid
+                        )
 
         with get_session() as session:
             session.add(

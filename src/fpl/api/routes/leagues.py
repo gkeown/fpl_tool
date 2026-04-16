@@ -96,12 +96,14 @@ def remove_league(
 
 @router.get("/{league_id}/standings")
 async def get_standings(
-    league_id: int, force: bool = False
+    league_id: int,
+    force: bool = False,
+    user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Return league standings. Re-fetches if stale (>1hr) or force=true."""
     with get_session() as session:
         league: League | None = session.get(League, league_id)
-        if not league:
+        if not league or league.user_id != user["user_id"]:
             raise HTTPException(status_code=404, detail="League not subscribed.")
 
         # Check staleness
@@ -116,7 +118,14 @@ async def get_standings(
             except (ValueError, TypeError):
                 stale = True
 
-    if stale:
+    # Get the FPL league ID (distinct from DB id) for API fetch
+    fpl_league_id: int | None = None
+    with get_session() as session:
+        lg = session.get(League, league_id)
+        if lg:
+            fpl_league_id = lg.league_id
+
+    if stale and fpl_league_id:
         settings = get_settings()
         headers = {"User-Agent": settings.user_agent}
         async with httpx.AsyncClient(
@@ -124,9 +133,14 @@ async def get_standings(
         ) as client:
             from fpl.ingest.leagues import fetch_league_standings, upsert_league
 
-            data = await fetch_league_standings(client, settings, league_id)
+            data = await fetch_league_standings(
+                client, settings, fpl_league_id
+            )
             with get_session() as session:
-                upsert_league(session, league_id, data)
+                upsert_league(
+                    session, fpl_league_id, data,
+                    user_id=user["user_id"],
+                )
 
     with get_session() as session:
         league = session.get(League, league_id)
