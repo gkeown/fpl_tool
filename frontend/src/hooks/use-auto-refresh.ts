@@ -19,19 +19,18 @@ function isMatchWindow(): boolean {
     const hour = parseInt(hourStr, 10);
 
     // Weekday as string: Mon, Tue, Wed, Thu, Fri, Sat, Sun
-    if (weekday === "Sat" && hour >= 12 && hour < 22) return true;
-    if (weekday === "Sun" && hour >= 12 && hour < 22) return true;
-    if (weekday === "Mon" && hour >= 20 && hour < 23) return true;
-    if (weekday === "Fri" && hour >= 19 && hour < 23) return true;
+    if (weekday === "Sat" && hour >= 12 && hour < 23) return true;
+    if (weekday === "Sun" && hour >= 12 && hour < 23) return true;
+    // Mon-Fri evenings (covers midweek European fixtures)
+    if (["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday) && hour >= 19 && hour < 23) return true;
     return false;
   } catch {
     // Fallback to local time if Intl fails
     const now = new Date();
     const day = now.getDay();
     const hour = now.getHours();
-    if (day === 6 && hour >= 12 && hour < 22) return true;
-    if (day === 0 && hour >= 12 && hour < 22) return true;
-    if (day === 1 && hour >= 20 && hour < 23) return true;
+    if ((day === 6 || day === 0) && hour >= 12 && hour < 23) return true;
+    if (hour >= 19 && hour < 23) return true; // Every weekday evening
     return false;
   }
 }

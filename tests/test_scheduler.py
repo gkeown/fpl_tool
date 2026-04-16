@@ -56,8 +56,16 @@ def test_tuesday_is_not_match_window() -> None:
         assert _in_window(_MATCH_WINDOWS) is False
 
 
-def test_wednesday_is_not_match_window() -> None:
+def test_wednesday_evening_is_match_window() -> None:
+    """Wednesday 20:00 is in window for midweek European fixtures."""
     dt = _make_dt(2, 20)
+    with patch("fpl.scheduler.datetime") as mock_dt:
+        mock_dt.now.return_value = dt
+        assert _in_window(_MATCH_WINDOWS) is True
+
+
+def test_wednesday_afternoon_is_not_match_window() -> None:
+    dt = _make_dt(2, 15)
     with patch("fpl.scheduler.datetime") as mock_dt:
         mock_dt.now.return_value = dt
         assert _in_window(_MATCH_WINDOWS) is False
