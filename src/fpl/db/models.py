@@ -8,6 +8,17 @@ class Base(DeclarativeBase):
     pass
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(unique=True)
+    role: Mapped[str]  # "admin" or "guest"
+    fpl_team_id: Mapped[int] = mapped_column(default=0)
+    league_ids: Mapped[str] = mapped_column(default="")
+    created_at: Mapped[str]
+
+
 class Team(Base):
     __tablename__ = "teams"
 
@@ -279,6 +290,7 @@ class MyTeamPlayer(Base):
     __tablename__ = "my_team_players"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(default=1)
     player_id: Mapped[int] = mapped_column(ForeignKey("players.fpl_id"))
     selling_price: Mapped[int]
     purchase_price: Mapped[int]
@@ -294,7 +306,8 @@ class MyTeamPlayer(Base):
 class MyAccount(Base):
     __tablename__ = "my_account"
 
-    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(default=1, unique=True)
     fpl_team_id: Mapped[int]
     player_name: Mapped[str]
     overall_points: Mapped[int]
@@ -430,8 +443,11 @@ class PlayerProjection(Base):
 
 class League(Base):
     __tablename__ = "leagues"
+    __table_args__ = (UniqueConstraint("user_id", "league_id"),)
 
-    league_id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(default=1)
+    league_id: Mapped[int]
     name: Mapped[str]
     fetched_at: Mapped[str]
 
@@ -445,7 +461,7 @@ class LeagueEntry(Base):
     __table_args__ = (UniqueConstraint("league_id", "entry_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    league_id: Mapped[int] = mapped_column(ForeignKey("leagues.league_id"))
+    league_id: Mapped[int] = mapped_column(ForeignKey("leagues.id"))
     entry_id: Mapped[int]
     player_name: Mapped[str]
     entry_name: Mapped[str]

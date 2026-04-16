@@ -116,6 +116,7 @@ app.add_middleware(
 )
 
 from fpl.api.routes import (  # noqa: E402
+    auth,
     captain,
     data,
     fixtures,
@@ -130,6 +131,7 @@ from fpl.api.routes import (  # noqa: E402
     transfers,
 )
 
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(players.router, prefix="/api/players", tags=["players"])
 app.include_router(team.router, prefix="/api/me", tags=["team"])
 app.include_router(fixtures.router, prefix="/api/fixtures", tags=["fixtures"])

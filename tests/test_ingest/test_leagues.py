@@ -57,7 +57,7 @@ def test_upsert_league_creates_league_and_entries(
 
     assert count == 2
 
-    league = db_session.get(League, 620795)
+    league = db_session.query(League).filter(League.league_id == 620795).first()
     assert league is not None
     assert league.name == "Test League"
 
@@ -112,7 +112,7 @@ def test_upsert_league_updates_on_conflict(db_session: Session) -> None:
     # Should still be 2 entries, not 4
     assert db_session.query(LeagueEntry).count() == 2
 
-    league = db_session.get(League, 620795)
+    league = db_session.query(League).filter(League.league_id == 620795).first()
     assert league is not None
     assert league.name == "Test League Updated"
 
@@ -133,7 +133,7 @@ def test_upsert_league_empty_standings(db_session: Session) -> None:
     db_session.commit()
 
     assert count == 0
-    league = db_session.get(League, 999)
+    league = db_session.query(League).filter(League.league_id == 999).first()
     assert league is not None
     assert league.name == "Empty"
 
@@ -145,7 +145,7 @@ def test_league_cascade_delete(db_session: Session) -> None:
 
     assert db_session.query(LeagueEntry).count() == 2
 
-    league = db_session.get(League, 620795)
+    league = db_session.query(League).filter(League.league_id == 620795).first()
     db_session.delete(league)
     db_session.commit()
 

@@ -1,9 +1,19 @@
+import { getToken, clearAuth } from './auth';
+
 // In production (served by FastAPI), use relative path.
 // In dev (Vite proxy), also use relative path — Vite proxies /api to FastAPI.
 const BASE = '/api';
 
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, {
+    headers: authHeaders(),
+  });
+  if (res.status === 401) { clearAuth(); window.location.href = '/login'; }
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -11,9 +21,10 @@ async function get<T>(path: string): Promise<T> {
 async function post<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401) { clearAuth(); window.location.href = '/login'; }
   if (!res.ok) throw new Error(`API error: ${res.status}`);
   return res.json();
 }
@@ -420,6 +431,17 @@ export const api = {
     const q = league ? `?league=${league}` : '';
     return get<unknown>(`/stats/player/${id}/xg${q}`);
   },
+
+  // Auth (no auth header needed for login)
+  login: (username: string, password: string) =>
+    fetch(`${BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    }).then(r => { if (!r.ok) throw new Error(`Login failed: ${r.status}`); return r.json(); }),
+  getMe: () => get<unknown>('/auth/me'),
+  setup: (fpl_team_id: number, league_ids: string) =>
+    post<unknown>('/auth/setup', { fpl_team_id, league_ids }),
 
   // Data management
   getDataStatus: () => get<DataSource[]>('/data/status'),

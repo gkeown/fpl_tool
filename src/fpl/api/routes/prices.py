@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from fpl.analysis.price import predict_price_changes
+from fpl.auth import require_admin
 from fpl.cli.formatters import format_cost, position_str
 from fpl.db.engine import get_session
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/risers")

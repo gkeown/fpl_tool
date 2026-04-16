@@ -51,48 +51,44 @@ def _patch_db(db_session: Session):
     leagues_mod.get_session = original
 
 
-def test_list_leagues_empty(db_session: Session, _patch_db: None) -> None:
-    """GET /api/leagues should return empty list when none subscribed."""
+def _admin_headers() -> dict[str, str]:
+    from fpl.auth import create_token
+    token = create_token(1, "testadmin", "admin")
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def test_list_leagues_empty(
+    db_session: Session, _patch_db: None,
+) -> None:
     with patch("fpl.api.app.init_db"):
         from fpl.api.app import app
-        import httpx
-
         transport = ASGITransport(app=app)
-        # Sync route, use sync client pattern via async
-        import asyncio
-
-        async def _run() -> httpx.Response:
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
-                return await client.get("/api/leagues")
-
-        resp = asyncio.get_event_loop().run_until_complete(_run())
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.get(
+                "/api/leagues", headers=_admin_headers()
+            )
 
     assert resp.status_code == 200
     assert resp.json() == []
 
 
-def test_list_leagues_with_data(
-    db_session: Session, _patch_db: None
+async def test_list_leagues_with_data(
+    db_session: Session, _patch_db: None,
 ) -> None:
-    """GET /api/leagues should return subscribed leagues."""
-    upsert_league(db_session, 620795, SAMPLE_DATA)
+    upsert_league(db_session, 620795, SAMPLE_DATA, user_id=1)
     db_session.commit()
 
     with patch("fpl.api.app.init_db"):
         from fpl.api.app import app
-
         transport = ASGITransport(app=app)
-        import asyncio
-
-        async def _run():
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
-                return await client.get("/api/leagues")
-
-        resp = asyncio.get_event_loop().run_until_complete(_run())
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.get(
+                "/api/leagues", headers=_admin_headers()
+            )
 
     assert resp.status_code == 200
     data = resp.json()
@@ -102,46 +98,45 @@ def test_list_leagues_with_data(
     assert data[0]["entry_count"] == 2
 
 
-def test_delete_league(db_session: Session, _patch_db: None) -> None:
-    """DELETE /api/leagues/{id} should remove league and entries."""
-    upsert_league(db_session, 620795, SAMPLE_DATA)
+async def test_delete_league(
+    db_session: Session, _patch_db: None,
+) -> None:
+    upsert_league(db_session, 620795, SAMPLE_DATA, user_id=1)
     db_session.commit()
+    league = (
+        db_session.query(League)
+        .filter(League.league_id == 620795)
+        .first()
+    )
+    assert league is not None
 
     with patch("fpl.api.app.init_db"):
         from fpl.api.app import app
-
         transport = ASGITransport(app=app)
-        import asyncio
-
-        async def _run():
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
-                return await client.delete("/api/leagues/620795")
-
-        resp = asyncio.get_event_loop().run_until_complete(_run())
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.delete(
+                f"/api/leagues/{league.id}",
+                headers=_admin_headers(),
+            )
 
     assert resp.status_code == 200
     assert db_session.query(League).count() == 0
     assert db_session.query(LeagueEntry).count() == 0
 
 
-def test_delete_nonexistent_league(
-    db_session: Session, _patch_db: None
+async def test_delete_nonexistent_league(
+    db_session: Session, _patch_db: None,
 ) -> None:
-    """DELETE on a non-subscribed league should return 404."""
     with patch("fpl.api.app.init_db"):
         from fpl.api.app import app
-
         transport = ASGITransport(app=app)
-        import asyncio
-
-        async def _run():
-            async with AsyncClient(
-                transport=transport, base_url="http://test"
-            ) as client:
-                return await client.delete("/api/leagues/999")
-
-        resp = asyncio.get_event_loop().run_until_complete(_run())
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as client:
+            resp = await client.delete(
+                "/api/leagues/999", headers=_admin_headers()
+            )
 
     assert resp.status_code == 404

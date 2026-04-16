@@ -36,33 +36,45 @@ async def fetch_entry_transfers(
 
 
 def upsert_league(
-    session: Session, league_id: int, data: dict[str, Any]
+    session: Session,
+    league_id: int,
+    data: dict[str, Any],
+    user_id: int = 1,
 ) -> int:
     """Upsert league info and standings entries. Returns count of entries."""
     now = _now_utc()
     league_info = data.get("league", {})
+    league_name = league_info.get("name", f"League {league_id}")
 
-    # Upsert league record
-    league_values = {
-        "league_id": league_id,
-        "name": league_info.get("name", f"League {league_id}"),
-        "fetched_at": now,
-    }
-    stmt = sqlite_insert(League).values([league_values])
-    stmt = stmt.on_conflict_do_update(
-        index_elements=[League.league_id],
-        set_={"name": stmt.excluded.name, "fetched_at": stmt.excluded.fetched_at},
+    # Find or create league for this user
+    existing: League | None = (
+        session.query(League)
+        .filter(League.user_id == user_id, League.league_id == league_id)
+        .first()
     )
-    session.execute(stmt)
+    if existing:
+        existing.name = league_name
+        existing.fetched_at = now
+        league_pk = existing.id
+    else:
+        new_league = League(
+            user_id=user_id,
+            league_id=league_id,
+            name=league_name,
+            fetched_at=now,
+        )
+        session.add(new_league)
+        session.flush()
+        league_pk = new_league.id
 
     # Upsert standing entries
     standings = data.get("standings", {}).get("results", [])
     if not standings:
         return 0
 
-    entry_values = [
-        {
-            "league_id": league_id,
+    for s in standings:
+        vals = {
+            "league_id": league_pk,
             "entry_id": s["entry"],
             "player_name": s.get("player_name", ""),
             "entry_name": s.get("entry_name", ""),
@@ -71,13 +83,12 @@ def upsert_league(
             "event_total": s.get("event_total", 0),
             "fetched_at": now,
         }
-        for s in standings
-    ]
-
-    for vals in entry_values:
         entry_stmt = sqlite_insert(LeagueEntry).values([vals])
         entry_stmt = entry_stmt.on_conflict_do_update(
-            index_elements=[LeagueEntry.league_id, LeagueEntry.entry_id],
+            index_elements=[
+                LeagueEntry.league_id,
+                LeagueEntry.entry_id,
+            ],
             set_={
                 col: entry_stmt.excluded[col]
                 for col in vals
@@ -86,4 +97,4 @@ def upsert_league(
         )
         session.execute(entry_stmt)
 
-    return len(entry_values)
+    return len(standings)

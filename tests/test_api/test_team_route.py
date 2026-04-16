@@ -103,6 +103,13 @@ async def _mock_live_gw(gw: int) -> dict:
     return {}
 
 
+def _admin_headers() -> dict[str, str]:
+    """Create an auth token for test requests."""
+    from fpl.auth import create_token
+    token = create_token(1, "testadmin", "admin")
+    return {"Authorization": f"Bearer {token}"}
+
+
 async def test_get_team_returns_gameweek_points(
     db_session: Session, _patch_db: None,
 ) -> None:
@@ -114,7 +121,7 @@ async def test_get_team_returns_gameweek_points(
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/me/team")
+            resp = await client.get("/api/me/team", headers=_admin_headers())
 
     assert resp.status_code == 200
     data = resp.json()
@@ -136,7 +143,7 @@ async def test_get_team_returns_player_gw_points(
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/me/team")
+            resp = await client.get("/api/me/team", headers=_admin_headers())
 
     data = resp.json()
     players = {p["web_name"]: p for p in data["players"]}
@@ -166,7 +173,7 @@ async def test_get_team_404_when_no_team(
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/me/team")
+            resp = await client.get("/api/me/team", headers=_admin_headers())
 
     assert resp.status_code == 404
 
@@ -182,7 +189,7 @@ async def test_get_team_player_fields(
         from fpl.api.app import app
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            resp = await client.get("/api/me/team")
+            resp = await client.get("/api/me/team", headers=_admin_headers())
 
     data = resp.json()
     player = data["players"][0]

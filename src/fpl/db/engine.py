@@ -61,6 +61,18 @@ def init_db() -> None:
             "ALTER TABLE fixtures ADD COLUMN finished_provisional "
             "BOOLEAN DEFAULT 0",
         ),
+        (
+            "my_team_players",
+            "user_id",
+            "ALTER TABLE my_team_players ADD COLUMN user_id "
+            "INTEGER DEFAULT 1",
+        ),
+        (
+            "my_account",
+            "user_id",
+            "ALTER TABLE my_account ADD COLUMN user_id "
+            "INTEGER DEFAULT 1",
+        ),
     ]
     with engine.begin() as conn:
         for table, column, ddl in migrations:

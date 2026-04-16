@@ -35,6 +35,7 @@ def test_all_tables_created(db_session: Session) -> None:
         "ingest_logs",
         "leagues",
         "league_entries",
+        "users",
     }
     assert expected == table_names
 

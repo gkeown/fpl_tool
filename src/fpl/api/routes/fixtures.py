@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from fpl.analysis.form import get_current_gameweek, get_next_gameweek
+from fpl.auth import require_admin
 from fpl.db.engine import get_session
 from fpl.db.models import BettingOdds, CustomFdr, Fixture, Team
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/")

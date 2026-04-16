@@ -2,14 +2,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from fpl.analysis.transfers import compare_players, suggest_transfers
+from fpl.auth import require_admin
 from fpl.cli.formatters import format_cost, position_str
 from fpl.db.engine import get_session
 from fpl.db.models import MyAccount
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/suggest")

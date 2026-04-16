@@ -101,40 +101,68 @@ def upsert_my_team(
     team_id: int,
     entry_data: dict[str, Any],
     picks_data: dict[str, Any],
+    user_id: int = 1,
 ) -> int:
     """Upsert user's team data from public entry + picks endpoints."""
     now = _now_utc()
 
-    # Upsert MyAccount
+    # Upsert MyAccount for this user
     entry_history = picks_data.get("entry_history", {})
-    account_values = {
-        "id": 1,
-        "fpl_team_id": team_id,
-        "player_name": (
+
+    existing: MyAccount | None = (
+        session.query(MyAccount)
+        .filter(MyAccount.user_id == user_id)
+        .first()
+    )
+    if existing:
+        existing.fpl_team_id = team_id
+        existing.player_name = (
             f"{entry_data.get('player_first_name', '')} "
             f"{entry_data.get('player_last_name', '')}"
-        ).strip(),
-        "overall_points": entry_data.get("summary_overall_points", 0),
-        "overall_rank": entry_data.get("summary_overall_rank", 0),
-        "bank": entry_history.get("bank", 0),
-        "total_transfers": entry_data.get("last_deadline_total_transfers", 0),
-        "free_transfers": max(
-            1,
-            2 - entry_history.get("event_transfers", 0),
-        ),
-        "gameweek_points": entry_history.get("points", 0),
-        "fetched_at": now,
-    }
+        ).strip()
+        existing.overall_points = entry_data.get(
+            "summary_overall_points", 0
+        )
+        existing.overall_rank = entry_data.get("summary_overall_rank", 0)
+        existing.bank = entry_history.get("bank", 0)
+        existing.total_transfers = entry_data.get(
+            "last_deadline_total_transfers", 0
+        )
+        existing.free_transfers = max(
+            1, 2 - entry_history.get("event_transfers", 0)
+        )
+        existing.gameweek_points = entry_history.get("points", 0)
+        existing.fetched_at = now
+    else:
+        session.add(
+            MyAccount(
+                user_id=user_id,
+                fpl_team_id=team_id,
+                player_name=(
+                    f"{entry_data.get('player_first_name', '')} "
+                    f"{entry_data.get('player_last_name', '')}"
+                ).strip(),
+                overall_points=entry_data.get(
+                    "summary_overall_points", 0
+                ),
+                overall_rank=entry_data.get("summary_overall_rank", 0),
+                bank=entry_history.get("bank", 0),
+                total_transfers=entry_data.get(
+                    "last_deadline_total_transfers", 0
+                ),
+                free_transfers=max(
+                    1, 2 - entry_history.get("event_transfers", 0)
+                ),
+                gameweek_points=entry_history.get("points", 0),
+                fetched_at=now,
+            )
+        )
+    session.flush()
 
-    stmt = sqlite_insert(MyAccount).values([account_values])
-    stmt = stmt.on_conflict_do_update(
-        index_elements=[MyAccount.id],
-        set_={col: stmt.excluded[col] for col in account_values if col != "id"},
-    )
-    session.execute(stmt)
-
-    # Clear old team and insert new picks
-    session.query(MyTeamPlayer).delete()
+    # Clear old team picks for this user and insert new ones
+    session.query(MyTeamPlayer).filter(
+        MyTeamPlayer.user_id == user_id
+    ).delete()
 
     picks = picks_data.get("picks", [])
     for pick in picks:
@@ -142,6 +170,7 @@ def upsert_my_team(
         cost = player.now_cost if player else 0
 
         mtp = MyTeamPlayer(
+            user_id=user_id,
             player_id=pick["element"],
             selling_price=cost,
             purchase_price=cost,

@@ -4,9 +4,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from fpl.analysis.form import get_current_gameweek
+from fpl.auth import get_current_user
 from fpl.cli.formatters import position_str
 from fpl.config import get_settings
 from fpl.db.engine import get_session
@@ -22,10 +23,16 @@ router = APIRouter()
 
 
 @router.get("")
-def list_leagues() -> list[dict[str, Any]]:
-    """List all subscribed leagues."""
+def list_leagues(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """List subscribed leagues for the current user."""
     with get_session() as session:
-        leagues: list[League] = session.query(League).all()
+        leagues: list[League] = (
+            session.query(League)
+            .filter(League.user_id == user["user_id"])
+            .all()
+        )
         return [
             {
                 "league_id": lg.league_id,
@@ -74,11 +81,14 @@ async def add_league(league_id: int) -> dict[str, Any]:
 
 
 @router.delete("/{league_id}")
-def remove_league(league_id: int) -> dict[str, str]:
-    """Unsubscribe from a league."""
+def remove_league(
+    league_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, str]:
+    """Unsubscribe from a league (by DB id)."""
     with get_session() as session:
         league: League | None = session.get(League, league_id)
-        if not league:
+        if not league or league.user_id != user["user_id"]:
             raise HTTPException(status_code=404, detail="League not found.")
         session.delete(league)
     return {"status": "ok", "message": f"League {league_id} removed."}
@@ -146,8 +156,13 @@ async def get_standings(
 
 
 @router.get("/{league_id}/entry/{entry_id}")
-async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
+async def get_league_entry(
+    league_id: int,
+    entry_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     """Fetch an opponent's full team (live from FPL API)."""
+    is_guest = user["role"] == "guest"
     settings = get_settings()
     headers = {"User-Agent": settings.user_agent}
 
@@ -360,7 +375,7 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
         ),
         "transfers_made": entry_history.get("event_transfers", 0),
         "active_chip": picks.get("active_chip"),
-        "chips": history.get("chips", []),
+        "chips": [] if is_guest else history.get("chips", []),
         "players": players_out,
-        "transfers": transfers_out,
+        "transfers": [] if is_guest else transfers_out,
     }

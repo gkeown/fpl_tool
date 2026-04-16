@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     auto_refresh: bool = True
     league_ids: str = ""  # Comma-separated league IDs to auto-subscribe
     api_football_season: int = 2024
+    admin_password: str = "admin"
+    guest_code: str = "guest"
+    jwt_secret: str = "change-me-to-a-random-secret"
 
 
 def get_settings() -> Settings:

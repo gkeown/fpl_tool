@@ -315,7 +315,8 @@ export default function MyTeamPage() {
       {starters.length > 0 && <PlayerTable players={starters} title="Starting XI" />}
       {bench.length > 0 && <PlayerTable players={bench} title="Bench" dimmed />}
 
-      {teamData?.players && teamData.players.length > 0 && (
+      {teamData?.players && teamData.players.length > 0 &&
+        teamData.players.some((p: any) => (p.next_fixtures || []).length > 0) && (
         <NextFixturesTable players={teamData.players} />
       )}
 

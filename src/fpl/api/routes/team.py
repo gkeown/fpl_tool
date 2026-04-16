@@ -5,10 +5,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from fpl.analysis.form import get_current_gameweek
 from fpl.analysis.team import analyse_team
+from fpl.auth import get_current_user
 from fpl.cli.formatters import position_str
 from fpl.config import get_settings
 from fpl.db.engine import get_session
@@ -128,13 +129,19 @@ async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
 
 
 @router.get("/team")
-async def get_team() -> dict[str, Any]:
+async def get_team(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     """Current squad with form + projected points + live bonus."""
+    user_id = user["user_id"]
+    is_guest = user["role"] == "guest"
+
     with get_session() as session:
         rows = (
             session.query(MyTeamPlayer, Player, Team)
             .join(Player, Player.fpl_id == MyTeamPlayer.player_id)
             .join(Team, Team.fpl_id == Player.team_id)
+            .filter(MyTeamPlayer.user_id == user_id)
             .order_by(MyTeamPlayer.position)
             .all()
         )
@@ -142,11 +149,15 @@ async def get_team() -> dict[str, Any]:
         if not rows:
             raise HTTPException(
                 status_code=404,
-                detail="No team data found. Load a team via POST /api/me/login.",
+                detail="No team data found. Set up your team first.",
             )
 
         current_gw = get_current_gameweek(session)
-        account: MyAccount | None = session.get(MyAccount, 1)
+        account: MyAccount | None = (
+            session.query(MyAccount)
+            .filter(MyAccount.user_id == user_id)
+            .first()
+        )
 
         # Build opponent + live fixture lookup from current GW fixtures
         all_teams = {t.fpl_id: t.short_name for t in session.query(Team).all()}
@@ -301,7 +312,7 @@ async def get_team() -> dict[str, Any]:
                 "selling_price": float(p["selling_price"]) / 10,
                 "opponent": p["opponent"],
                 "is_dgw": p["is_dgw"],
-                "next_fixtures": p["next_fixtures"],
+                "next_fixtures": [] if is_guest else p["next_fixtures"],
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
                 "gw_bonus": live_bonus,

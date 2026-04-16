@@ -23,6 +23,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn>=0.32",
     "apscheduler>=3.10",
+    "python-jose[cryptography]>=3.3",
 ]
 
 [project.optional-dependencies]
@@ -52,6 +53,8 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# B008: FastAPI's Depends() in function defaults is the standard pattern
+per-file-ignores = {"src/fpl/api/routes/*.py" = ["B008"], "src/fpl/auth.py" = ["B008"]}
 
 [tool.mypy]
 strict = true
