@@ -28,7 +28,7 @@ export default function LeaguePage() {
     onSuccess: (data: any) => {
       qc.invalidateQueries({ queryKey: ["leagues"] });
       setLeagueId("");
-      setSelectedLeague(data.league_id);
+      setSelectedLeague(data.id);
     },
   });
 
@@ -44,7 +44,7 @@ export default function LeaguePage() {
   const leagueList = (leagues.data as any[]) ?? [];
 
   // Auto-select first league if none selected
-  const activeLeagueId = selectedLeague ?? leagueList[0]?.league_id ?? null;
+  const activeLeagueId = selectedLeague ?? leagueList[0]?.id ?? null;
 
   const standings = useQuery({
     queryKey: ["leagueStandings", activeLeagueId],
@@ -125,10 +125,10 @@ export default function LeaguePage() {
           {leagueList.map((lg: any) => (
             <Button
               key={lg.league_id}
-              variant={activeLeagueId === lg.league_id ? "default" : "outline"}
+              variant={activeLeagueId === lg.id ? "default" : "outline"}
               size="sm"
-              onClick={() => setSelectedLeague(lg.league_id)}
-              className={activeLeagueId === lg.league_id ? "bg-fpl-green text-black hover:bg-fpl-green/80" : ""}
+              onClick={() => setSelectedLeague(lg.id)}
+              className={activeLeagueId === lg.id ? "bg-fpl-green text-black hover:bg-fpl-green/80" : ""}
             >
               <Trophy className="h-3.5 w-3.5 mr-1" />
               {lg.name}

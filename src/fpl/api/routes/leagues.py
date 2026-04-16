@@ -35,6 +35,7 @@ def list_leagues(
         )
         return [
             {
+                "id": lg.id,
                 "league_id": lg.league_id,
                 "name": lg.name,
                 "entry_count": len(lg.entries),
@@ -45,8 +46,12 @@ def list_leagues(
 
 
 @router.post("")
-async def add_league(league_id: int) -> dict[str, Any]:
+async def add_league(
+    league_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
     """Subscribe to a league by ID. Fetches standings from FPL API."""
+    user_id = user["user_id"]
     settings = get_settings()
     headers = {"User-Agent": settings.user_agent}
 
@@ -59,11 +64,24 @@ async def add_league(league_id: int) -> dict[str, Any]:
             data = await fetch_league_standings(client, settings, league_id)
 
             with get_session() as session:
-                count = upsert_league(session, league_id, data)
+                count = upsert_league(
+                    session, league_id, data, user_id=user_id
+                )
+                # Get the DB id for the response
+                lg = (
+                    session.query(League)
+                    .filter(
+                        League.user_id == user_id,
+                        League.league_id == league_id,
+                    )
+                    .first()
+                )
+                db_id = lg.id if lg else None
 
         league_name = data.get("league", {}).get("name", f"League {league_id}")
         return {
             "status": "ok",
+            "id": db_id,
             "league_id": league_id,
             "name": league_name,
             "entries": count,
