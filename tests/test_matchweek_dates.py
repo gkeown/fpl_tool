@@ -19,46 +19,61 @@ def _run_with_date(d: date) -> list[str]:
         return _matchweek_dates()
 
 
-def test_friday_returns_fri_to_mon() -> None:
-    # Fri 2026-04-10 → [Fri 10, Sat 11, Sun 12, Mon 13]
-    result = _run_with_date(date(2026, 4, 10))
-    assert result == ["20260410", "20260411", "20260412", "20260413"]
+def _assert_window(result: list[str], tue: date) -> None:
+    """Assert the window starts on the given Tuesday and spans 7 days."""
+    from datetime import timedelta
+
+    expected = [
+        (tue + timedelta(days=d)).strftime("%Y%m%d")
+        for d in range(7)
+    ]
+    assert result == expected, f"Expected {expected}, got {result}"
 
 
-def test_saturday_returns_fri_to_mon() -> None:
-    # Sat 2026-04-11
-    result = _run_with_date(date(2026, 4, 11))
-    assert result == ["20260410", "20260411", "20260412", "20260413"]
-
-
-def test_sunday_returns_fri_to_mon() -> None:
-    # Sun 2026-04-12
-    result = _run_with_date(date(2026, 4, 12))
-    assert result == ["20260410", "20260411", "20260412", "20260413"]
-
-
-def test_monday_returns_last_weekend() -> None:
-    """Monday should show the weekend just past, not next weekend."""
-    # Mon 2026-04-13 → last Fri 10 through today Mon 13
-    result = _run_with_date(date(2026, 4, 13))
-    assert result == ["20260410", "20260411", "20260412", "20260413"]
-
-
-def test_tuesday_returns_last_weekend() -> None:
-    """Tuesday still shows the weekend just past (GW rarely ends Mon)."""
-    # Tue 2026-04-14 → last Fri 10 through Mon 13
+def test_tuesday_returns_last_tuesday() -> None:
+    # Tue 2026-04-14 → last Tue Apr 7 through Mon Apr 13
     result = _run_with_date(date(2026, 4, 14))
-    assert result == ["20260410", "20260411", "20260412", "20260413"]
+    _assert_window(result, date(2026, 4, 7))
 
 
-def test_wednesday_returns_upcoming_weekend() -> None:
-    """Wednesday shifts to the upcoming weekend."""
-    # Wed 2026-04-15 → upcoming Fri 17
+def test_monday_returns_last_tuesday() -> None:
+    # Mon 2026-04-13 → last Tue Apr 7 through Mon Apr 13
+    result = _run_with_date(date(2026, 4, 13))
+    _assert_window(result, date(2026, 4, 7))
+
+
+def test_wednesday_returns_this_tuesday() -> None:
+    # Wed 2026-04-15 → this Tue Apr 14 through Mon Apr 20
     result = _run_with_date(date(2026, 4, 15))
-    assert result == ["20260417", "20260418", "20260419", "20260420"]
+    _assert_window(result, date(2026, 4, 14))
 
 
-def test_thursday_returns_upcoming_weekend() -> None:
-    # Thu 2026-04-16 → upcoming Fri 17
+def test_thursday_returns_this_tuesday() -> None:
+    # Thu 2026-04-16 → this Tue Apr 14 through Mon Apr 20
     result = _run_with_date(date(2026, 4, 16))
-    assert result == ["20260417", "20260418", "20260419", "20260420"]
+    _assert_window(result, date(2026, 4, 14))
+
+
+def test_friday_returns_this_tuesday() -> None:
+    # Fri 2026-04-17 → this Tue Apr 14 through Mon Apr 20
+    result = _run_with_date(date(2026, 4, 17))
+    _assert_window(result, date(2026, 4, 14))
+
+
+def test_saturday_returns_this_tuesday() -> None:
+    # Sat 2026-04-18 → this Tue Apr 14 through Mon Apr 20
+    result = _run_with_date(date(2026, 4, 18))
+    _assert_window(result, date(2026, 4, 14))
+
+
+def test_sunday_returns_this_tuesday() -> None:
+    # Sun 2026-04-19 → this Tue Apr 14 through Mon Apr 20
+    result = _run_with_date(date(2026, 4, 19))
+    _assert_window(result, date(2026, 4, 14))
+
+
+def test_window_is_always_7_days() -> None:
+    """Every day of the week should return exactly 7 dates."""
+    for d in range(7):
+        result = _run_with_date(date(2026, 4, 13 + d))
+        assert len(result) == 7, f"Weekday {d}: got {len(result)}"

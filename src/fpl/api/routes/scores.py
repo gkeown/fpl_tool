@@ -59,26 +59,25 @@ _STATUS_MAP: dict[str, str] = {
 def _matchweek_dates() -> list[str]:
     """Return date strings (YYYYMMDD) for the current matchweek.
 
-    Returns Friday through Monday of the relevant matchweek:
-    - Mon/Tue: the weekend that just happened (Mon is still the
-      current GW via Monday Night Football)
-    - Wed/Thu: the upcoming weekend (current GW done, next one ahead)
-    - Fri/Sat/Sun: this week's Fri-Mon
+    Covers a full Tuesday-to-Monday window (7 days) to capture both
+    midweek fixtures (Tue/Wed/Thu) and regular weekend games (Fri-Mon).
+
+    - Mon/Tue: last Tuesday through today (this round still finishing)
+    - Wed-Sun: this Tuesday through next Monday (full round window)
     """
     today = datetime.now(UTC).date()
     weekday = today.weekday()  # Mon=0 .. Sun=6
 
-    if weekday <= 1:  # Mon/Tue — last Friday
-        friday = today - timedelta(days=weekday + 3)
-    elif weekday <= 3:  # Wed/Thu — upcoming Friday
-        friday = today + timedelta(days=4 - weekday)
-    else:  # Fri/Sat/Sun — this week's Friday
-        friday = today - timedelta(days=weekday - 4)
+    # Find the Tuesday that starts this matchweek
+    if weekday <= 1:  # Mon(0)/Tue(1): last week's Tuesday
+        tuesday = today - timedelta(days=weekday + 6)
+    else:  # Wed(2)-Sun(6): this week's Tuesday
+        tuesday = today - timedelta(days=weekday - 1)
 
-    # Friday through Monday (4 days)
+    # Tuesday through Monday (7 days)
     return [
-        (friday + timedelta(days=d)).strftime("%Y%m%d")
-        for d in range(4)
+        (tuesday + timedelta(days=d)).strftime("%Y%m%d")
+        for d in range(7)
     ]
 
 
