@@ -15,12 +15,26 @@ _SessionLocal: sessionmaker[Session] | None = None
 def get_engine() -> Engine:
     global _engine
     if _engine is None:
+        from sqlalchemy import event as sa_event
+
         settings = get_settings()
         settings.db_path.parent.mkdir(parents=True, exist_ok=True)
         _engine = create_engine(
             f"sqlite:///{settings.db_path}",
             echo=False,
+            connect_args={"timeout": 30},
         )
+
+        # Enable WAL mode for concurrent read/write support
+        @sa_event.listens_for(_engine, "connect")
+        def _set_sqlite_pragma(
+            dbapi_conn: object, _rec: object
+        ) -> None:
+            cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.close()
+
     return _engine
 
 
