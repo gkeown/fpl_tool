@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, UserSearch, Calendar, ArrowLeftRight,
-  TrendingUp, Settings, Trophy, PanelLeft, Users2, Radio,
+  TrendingUp, Settings, Target, PanelLeft, Users2, Radio,
   TableProperties, BarChart3, Activity, LogOut, Wrench,
 } from "lucide-react";
 import {
@@ -51,9 +51,9 @@ export default function AppLayout() {
       <Sidebar collapsible="icon">
         <SidebarHeader className="p-4">
           <NavLink to="/" className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
-            <Trophy className="h-6 w-6 text-fpl-green shrink-0" />
+            <Target className="h-6 w-6 text-fpl-green shrink-0" />
             <span className="font-display text-lg font-bold text-fpl-green tracking-wider group-data-[collapsible=icon]:hidden">
-              FPL COMMAND
+              FPL TRACKER
             </span>
           </NavLink>
         </SidebarHeader>
@@ -106,8 +106,8 @@ export default function AppLayout() {
           <SidebarTrigger>
             <PanelLeft className="h-5 w-5" />
           </SidebarTrigger>
-          <Trophy className="h-5 w-5 text-fpl-green" />
-          <span className="font-display text-sm font-bold text-fpl-green tracking-wider">FPL COMMAND</span>
+          <Target className="h-5 w-5 text-fpl-green" />
+          <span className="font-display text-sm font-bold text-fpl-green tracking-wider">FPL TRACKER</span>
         </header>
         <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-[1400px]">
           <Outlet />

@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Trophy, Loader2 } from "lucide-react";
+import { Target, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -42,10 +42,10 @@ export default function LoginPage() {
       <Card className="w-full max-w-md card-stripe">
         <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-3">
-            <Trophy className="h-10 w-10 text-fpl-green" />
+            <Target className="h-10 w-10 text-fpl-green" />
           </div>
           <CardTitle className="text-2xl font-display tracking-wider text-fpl-green">
-            FPL COMMAND
+            FPL TRACKER
           </CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
             Sign in to your dashboard
