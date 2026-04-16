@@ -35,6 +35,9 @@ _LEAGUES = [
     {"slug": "esp.1", "name": "La Liga", "country": "Spain"},
     {"slug": "ger.1", "name": "Bundesliga", "country": "Germany"},
     {"slug": "fra.1", "name": "Ligue 1", "country": "France"},
+    {"slug": "uefa.champions", "name": "Champions League", "country": "Europe"},
+    {"slug": "uefa.europa", "name": "Europa League", "country": "Europe"},
+    {"slug": "uefa.europa.conf", "name": "Conference League", "country": "Europe"},
 ]
 
 _STATUS_MAP: dict[str, str] = {
