@@ -208,16 +208,14 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
             .all()
         )
         now_iso = datetime.now(UTC).isoformat()
-        opponent_lookup: dict[int, tuple[str, bool]] = {}
+        opponent_lookup: dict[int, list[tuple[str, bool]]] = {}
         live_team_ids: set[int] = set()
         for fix in gw_fixtures:
-            opponent_lookup[fix.team_h] = (
-                all_teams.get(fix.team_a, "?"),
-                True,
+            opponent_lookup.setdefault(fix.team_h, []).append(
+                (all_teams.get(fix.team_a, "?"), True)
             )
-            opponent_lookup[fix.team_a] = (
-                all_teams.get(fix.team_h, "?"),
-                False,
+            opponent_lookup.setdefault(fix.team_a, []).append(
+                (all_teams.get(fix.team_h, "?"), False)
             )
             if (
                 fix.kickoff_time
@@ -265,10 +263,13 @@ async def get_league_entry(league_id: int, entry_id: int) -> dict[str, Any]:
                 if live_pts is not None
                 else (player.event_points or 0)
             )
-            opp = opponent_lookup.get(player.team_id)
+            opps = opponent_lookup.get(player.team_id, [])
             opp_str = (
-                f"{opp[0]} (H)" if opp and opp[1]
-                else f"{opp[0]} (A)" if opp
+                ", ".join(
+                    f"{o} (H)" if h else f"{o} (A)"
+                    for o, h in opps
+                )
+                if opps
                 else "-"
             )
 

@@ -90,7 +90,8 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
                 </TableCell>
                 <TableCell className="px-3 py-1.5 text-sm text-center text-muted-foreground">
                   <div className="flex items-center justify-center gap-1">
-                    <span>{p.opponent || "-"}</span>
+                    {p.is_dgw && <span className="text-[10px] text-fpl-gold font-bold">DGW</span>}
+                    <span className={p.is_dgw ? "text-fpl-gold" : ""}>{p.opponent || "-"}</span>
                     {p.is_playing && (
                       <span className="text-[10px] text-fpl-green font-semibold tabular-nums">
                         {p.minutes}'

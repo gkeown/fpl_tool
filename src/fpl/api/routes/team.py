@@ -188,20 +188,17 @@ async def get_team() -> dict[str, Any]:
         for tid in next_fixtures_by_team:
             next_fixtures_by_team[tid] = next_fixtures_by_team[tid][:5]
         now_iso = datetime.now(UTC).isoformat()
-        # team_id -> (opponent_short_name, is_home)
-        opponent_lookup: dict[int, tuple[str, bool]] = {}
+        # team_id -> list of (opponent_short, is_home) for DGW support
+        opponent_lookup: dict[int, list[tuple[str, bool]]] = {}
         # team_id -> True if their fixture is currently in progress
         live_team_ids: set[int] = set()
         for fix in gw_fixtures:
-            opponent_lookup[fix.team_h] = (
-                all_teams.get(fix.team_a, "?"),
-                True,
+            opponent_lookup.setdefault(fix.team_h, []).append(
+                (all_teams.get(fix.team_a, "?"), True)
             )
-            opponent_lookup[fix.team_a] = (
-                all_teams.get(fix.team_h, "?"),
-                False,
+            opponent_lookup.setdefault(fix.team_a, []).append(
+                (all_teams.get(fix.team_h, "?"), False)
             )
-            # Fixture is live if kickoff passed and not finished
             if (
                 fix.kickoff_time
                 and fix.kickoff_time <= now_iso
@@ -211,10 +208,20 @@ async def get_team() -> dict[str, Any]:
                 live_team_ids.add(fix.team_h)
                 live_team_ids.add(fix.team_a)
 
+        def _format_opponents(
+            opps: list[tuple[str, bool]],
+        ) -> str:
+            if not opps:
+                return "-"
+            return ", ".join(
+                f"{o} (H)" if h else f"{o} (A)"
+                for o, h in opps
+            )
+
         # Snapshot DB data while session is open
         db_players: list[dict[str, Any]] = []
         for mtp, player, tm in rows:
-            opp = opponent_lookup.get(player.team_id)
+            opps = opponent_lookup.get(player.team_id, [])
             fixture_live = player.team_id in live_team_ids
             db_players.append(
                 {
@@ -229,11 +236,8 @@ async def get_team() -> dict[str, Any]:
                     "form": player.form,
                     "event_points": player.event_points or 0,
                     "defcon": player.defensive_contribution,
-                    "opponent": (
-                        f"{opp[0]} (H)" if opp and opp[1]
-                        else f"{opp[0]} (A)" if opp
-                        else "-"
-                    ),
+                    "opponent": _format_opponents(opps),
+                    "is_dgw": len(opps) > 1,
                     "next_fixtures": next_fixtures_by_team.get(
                         player.team_id, []
                     ),
@@ -295,6 +299,7 @@ async def get_team() -> dict[str, Any]:
                 "cost": float(p["now_cost"]) / 10,
                 "selling_price": float(p["selling_price"]) / 10,
                 "opponent": p["opponent"],
+                "is_dgw": p["is_dgw"],
                 "next_fixtures": p["next_fixtures"],
                 "event_points": event_pts,
                 "gw_points": event_pts * p["multiplier"],
