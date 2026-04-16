@@ -113,18 +113,20 @@ function PlayerTable({ players, title, dimmed }: { players: any[]; title: string
 }
 
 function NextFixturesTable({ players }: { players: any[] }) {
-  // Determine the max number of fixtures shown (usually 5)
-  const maxFixtures = Math.max(
-    0,
-    ...players.map((p) => (p.next_fixtures || []).length),
-  );
-  const fixtureColumns = Array.from({ length: maxFixtures });
+  // Collect all unique GW numbers across all players, sorted, take first 5
+  const allGws = new Set<number>();
+  for (const p of players) {
+    for (const f of p.next_fixtures || []) {
+      allGws.add(f.gw);
+    }
+  }
+  const gwColumns = Array.from(allGws).sort((a, b) => a - b).slice(0, 5);
 
   return (
     <Card className="mb-4">
       <CardHeader className="py-3 px-4">
         <CardTitle className="text-sm font-sans font-semibold uppercase tracking-widest text-muted-foreground">
-          Next {maxFixtures} Fixtures
+          Upcoming Fixtures
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
@@ -134,12 +136,12 @@ function NextFixturesTable({ players }: { players: any[] }) {
               <TableHead className="h-8 px-3 text-xs">Pos</TableHead>
               <TableHead className="h-8 px-3 text-xs">Player</TableHead>
               <TableHead className="h-8 px-3 text-xs">Team</TableHead>
-              {fixtureColumns.map((_, i) => (
+              {gwColumns.map((gw) => (
                 <TableHead
-                  key={i}
+                  key={gw}
                   className="h-8 px-2 text-xs text-center"
                 >
-                  +{i + 1}
+                  GW{gw}
                 </TableHead>
               ))}
             </TableRow>
@@ -147,6 +149,12 @@ function NextFixturesTable({ players }: { players: any[] }) {
           <TableBody>
             {players.map((p: any) => {
               const nf = (p.next_fixtures || []) as any[];
+              // Group fixtures by GW
+              const byGw: Record<number, any[]> = {};
+              for (const f of nf) {
+                if (!byGw[f.gw]) byGw[f.gw] = [];
+                byGw[f.gw].push(f);
+              }
               return (
                 <TableRow
                   key={p.id}
@@ -155,33 +163,40 @@ function NextFixturesTable({ players }: { players: any[] }) {
                   <TableCell className="px-3 py-1.5 text-sm">{p.position}</TableCell>
                   <TableCell className="px-3 py-1.5 text-sm font-medium">{p.web_name}</TableCell>
                   <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">{p.team}</TableCell>
-                  {fixtureColumns.map((_, i) => {
-                    const fx = nf[i];
-                    if (!fx) {
+                  {gwColumns.map((gw) => {
+                    const fxList = byGw[gw];
+                    if (!fxList || fxList.length === 0) {
                       return (
                         <TableCell
-                          key={i}
+                          key={gw}
                           className="px-2 py-1.5 text-xs text-center text-muted-foreground"
                         >
                           -
                         </TableCell>
                       );
                     }
-                    const fdr = fx.fdr || 3;
                     return (
                       <TableCell
-                        key={i}
+                        key={gw}
                         className="px-2 py-1.5 text-center"
                       >
-                        <span
-                          className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
-                          style={{
-                            backgroundColor: fdrBg(fdr),
-                            color: fdrTextColor(fdr),
-                          }}
-                        >
-                          {fx.is_home ? "" : "@"}{fx.opponent}
-                        </span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          {fxList.map((fx: any, i: number) => {
+                            const fdr = fx.fdr || 3;
+                            return (
+                              <span
+                                key={i}
+                                className="inline-block rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                                style={{
+                                  backgroundColor: fdrBg(fdr),
+                                  color: fdrTextColor(fdr),
+                                }}
+                              >
+                                {fx.is_home ? "" : "@"}{fx.opponent}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </TableCell>
                     );
                   })}

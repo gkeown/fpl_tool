@@ -186,7 +186,8 @@ async def get_team() -> dict[str, Any]:
             )
         # Limit to 5 per team
         for tid in next_fixtures_by_team:
-            next_fixtures_by_team[tid] = next_fixtures_by_team[tid][:5]
+            # Cap at 10 entries to cover 5 unique GWs even with DGWs
+            next_fixtures_by_team[tid] = next_fixtures_by_team[tid][:10]
         now_iso = datetime.now(UTC).isoformat()
         # team_id -> list of (opponent_short, is_home) for DGW support
         opponent_lookup: dict[int, list[tuple[str, bool]]] = {}
