@@ -68,7 +68,7 @@ async def _auto_setup() -> None:
             except Exception:
                 logger.exception("Team refresh failed")
 
-    # Auto-subscribe leagues from FPL_LEAGUE_IDS
+    # Auto-subscribe leagues from FPL_LEAGUE_IDS (for admin user_id=1)
     if settings.league_ids.strip():
         league_id_list = [
             int(x.strip())
@@ -77,14 +77,36 @@ async def _auto_setup() -> None:
         ]
         for lid in league_id_list:
             with get_session() as session:
-                existing: League | None = session.get(League, lid)
+                existing = (
+                    session.query(League)
+                    .filter(
+                        League.user_id == 1,
+                        League.league_id == lid,
+                    )
+                    .first()
+                )
                 already_exists = existing is not None
             if not already_exists:
                 logger.info("Auto-subscribing to league %d", lid)
                 try:
-                    from fpl.api.routes.leagues import add_league
+                    import httpx as _httpx
 
-                    await add_league(lid)
+                    from fpl.ingest.leagues import (
+                        fetch_league_standings,
+                        upsert_league,
+                    )
+
+                    async with _httpx.AsyncClient(
+                        timeout=settings.http_timeout,
+                        headers={"User-Agent": settings.user_agent},
+                    ) as client:
+                        data = await fetch_league_standings(
+                            client, settings, lid
+                        )
+                        with get_session() as session:
+                            upsert_league(
+                                session, lid, data, user_id=1
+                            )
                 except Exception:
                     logger.exception(
                         "Auto-subscribe league %d failed", lid
