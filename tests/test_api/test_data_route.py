@@ -36,7 +36,10 @@ async def test_data_status_returns_empty_list(
             resp = await client.get("/api/data/status")
 
     assert resp.status_code == 200
-    assert resp.json() == []
+    data = resp.json()
+    # Only 3 cache entries, no DB sources
+    db_sources = [d for d in data if "(cache)" not in d["source"]]
+    assert db_sources == []
 
 
 async def test_data_status_returns_latest_per_source(
@@ -69,12 +72,18 @@ async def test_data_status_returns_latest_per_source(
     data = resp.json()
     sources = {d["source"]: d for d in data}
 
-    assert len(data) == 2
+    # 2 DB sources + 3 cache entries (scores, standings, live_gw)
+    assert len(data) == 5
     assert sources["fpl"]["records_upserted"] == 505
     assert sources["odds"]["records_upserted"] == 20
 
     assert sources["fpl"]["duration_secs"] is not None
     assert sources["fpl"]["duration_secs"] == pytest.approx(120.0, abs=1.0)
+
+    # Cache entries should be present
+    assert "scores (cache)" in sources
+    assert "standings (cache)" in sources
+    assert "live_gw (cache)" in sources
 
 
 async def test_data_status_handles_failed_ingest(
@@ -95,7 +104,8 @@ async def test_data_status_handles_failed_ingest(
             resp = await client.get("/api/data/status")
 
     data = resp.json()
-    assert len(data) == 1
-    assert data[0]["status"] == "failed"
-    assert data[0]["error_message"] == "Connection timeout"
-    assert data[0]["records_upserted"] == 0
+    # 1 DB source + 3 cache entries
+    sources = {d["source"]: d for d in data}
+    assert sources["understat"]["status"] == "failed"
+    assert sources["understat"]["error_message"] == "Connection timeout"
+    assert sources["understat"]["records_upserted"] == 0

@@ -90,6 +90,45 @@ def status() -> list[dict[str, Any]]:
                 }
             )
 
+        # Append in-memory cache statuses (scores, standings, live GW)
+        from fpl.api.routes.live import _live_cache_updated_at
+        from fpl.api.routes.scores import (
+            _cache_updated_at as scores_updated,
+        )
+        from fpl.api.routes.scores import (
+            _standings_cache_updated_at as standings_updated,
+        )
+
+        for source_name, updated_at in [
+            ("scores (cache)", scores_updated),
+            ("standings (cache)", standings_updated),
+            ("live_gw (cache)", _live_cache_updated_at),
+        ]:
+            cache_age: float | None = None
+            if updated_at:
+                try:
+                    ts = datetime.fromisoformat(updated_at)
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=UTC)
+                    cache_age = (
+                        datetime.now(UTC) - ts
+                    ).total_seconds()
+                except (ValueError, TypeError):
+                    pass
+
+            results.append(
+                {
+                    "source": source_name,
+                    "status": "cached" if updated_at else "empty",
+                    "records_upserted": None,
+                    "started_at": None,
+                    "finished_at": updated_at or None,
+                    "duration_secs": None,
+                    "age_secs": cache_age,
+                    "error_message": None,
+                }
+            )
+
         return results
 
 
