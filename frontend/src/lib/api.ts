@@ -427,6 +427,12 @@ export const api = {
     const q = params.toString() ? `?${params}` : '';
     return get<unknown>(`/stats/player/${id}${q}`);
   },
+  getLeaders: (league?: string, top = 20) => {
+    const params = new URLSearchParams();
+    if (league) params.set('league', league);
+    params.set('top', String(top));
+    return get<unknown>(`/stats/leaders?${params}`);
+  },
   getPlayerXg: (id: string, league?: string) => {
     const q = league ? `?league=${league}` : '';
     return get<unknown>(`/stats/player/${id}/xg${q}`);

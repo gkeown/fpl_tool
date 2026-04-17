@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Search, X, ArrowLeft, Star } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Search, X, ArrowLeft, Star, Trophy } from "lucide-react";
 
 const LEAGUE_NAMES: Record<string, string> = {
   "eng.1": "Premier League",
@@ -282,6 +284,144 @@ function PlayerDetail({ playerId, league, onBack }: { playerId: string; league: 
   );
 }
 
+function LeaderTable({ entries, type }: { entries: any[]; type: "goals" | "assists" }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow className="bg-muted/20 hover:bg-muted/20">
+          <TableHead className="h-8 px-3 text-xs w-10">#</TableHead>
+          <TableHead className="h-8 px-3 text-xs">Player</TableHead>
+          <TableHead className="h-8 px-3 text-xs">Team</TableHead>
+          <TableHead className="h-8 px-3 text-xs text-right">{type === "goals" ? "Goals" : "Assists"}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {entries.map((e: any, i: number) => {
+          const parts = (e.value || "").match(/(\d+)$/);
+          const num = parts ? parts[1] : e.value;
+          return (
+            <TableRow key={i} className="border-b border-border/20">
+              <TableCell className="px-3 py-1.5 text-sm text-muted-foreground font-bold tabular-nums">{i + 1}</TableCell>
+              <TableCell className="px-3 py-1.5 text-sm font-medium">{e.name}</TableCell>
+              <TableCell className="px-3 py-1.5 text-sm text-muted-foreground">{e.team_short || e.team}</TableCell>
+              <TableCell className="px-3 py-1.5 text-sm text-right font-bold tabular-nums text-fpl-green">{num}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
+function LeagueLeaders({ league }: { league: any }) {
+  return (
+    <div className="mb-6">
+      <h3 className="text-sm font-display font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+        {league.league}
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-sans font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+              <Trophy className="h-3 w-3 text-fpl-green" />
+              Top Scorers
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <LeaderTable entries={league.scorers || []} type="goals" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2 pt-3 px-4">
+            <CardTitle className="text-xs font-sans font-semibold uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+              <Trophy className="h-3 w-3 text-fpl-gold" />
+              Top Assisters
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <LeaderTable entries={league.assisters || []} type="assists" />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+const LEADER_LEAGUE_ORDER = ["eng.1", "eng.2", "esp.1", "ita.1", "ger.1", "fra.1"];
+const LEADER_LEAGUE_SHORT: Record<string, string> = {
+  "eng.1": "PL",
+  "eng.2": "Champ",
+  "esp.1": "La Liga",
+  "ita.1": "Serie A",
+  "ger.1": "Bundesliga",
+  "fra.1": "Ligue 1",
+};
+
+function LeadersSection() {
+  const leaders = useQuery({
+    queryKey: ["leaders"],
+    queryFn: () => api.getLeaders(),
+  });
+
+  const data = leaders.data as any;
+  const allLeagues = data?.leagues ?? [];
+
+  if (leaders.isLoading) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-48 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  if (leaders.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Failed to load leaders.</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Tabs defaultValue="all">
+      <TabsList className="bg-muted/50 mb-4 flex-wrap h-auto gap-1">
+        <TabsTrigger value="all" className="data-[state=active]:bg-background data-[state=active]:text-fpl-green data-[state=active]:shadow-sm">
+          All
+        </TabsTrigger>
+        {LEADER_LEAGUE_ORDER.filter((slug) =>
+          allLeagues.some((l: any) => l.slug === slug),
+        ).map((slug) => (
+          <TabsTrigger
+            key={slug}
+            value={slug}
+            className="data-[state=active]:bg-background data-[state=active]:text-fpl-green data-[state=active]:shadow-sm"
+          >
+            {LEADER_LEAGUE_SHORT[slug] || slug}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      <TabsContent value="all">
+        {LEADER_LEAGUE_ORDER.map((slug) => {
+          const lg = allLeagues.find((l: any) => l.slug === slug);
+          return lg ? <LeagueLeaders key={slug} league={lg} /> : null;
+        })}
+      </TabsContent>
+
+      {LEADER_LEAGUE_ORDER.map((slug) => {
+        const lg = allLeagues.find((l: any) => l.slug === slug);
+        return lg ? (
+          <TabsContent key={slug} value={slug}>
+            <LeagueLeaders league={lg} />
+          </TabsContent>
+        ) : null;
+      })}
+    </Tabs>
+  );
+}
+
 export default function StatsPage() {
   const [search, setSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -315,54 +455,71 @@ export default function StatsPage() {
 
   return (
     <div>
-      <PageHeader title="Player Stats" subtitle="Search any player across European leagues" />
+      <PageHeader title="Player Stats" />
 
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by player name... (press Enter)"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={handleSearch}
-          className="pl-10 pr-10"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => { setSearch(""); setSearchQuery(""); }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
-      </div>
+      <Tabs defaultValue="leaders" className="mb-4">
+        <TabsList className="bg-muted/50 mb-4">
+          <TabsTrigger value="leaders" className="data-[state=active]:bg-background data-[state=active]:text-fpl-green data-[state=active]:shadow-sm">
+            Top Scorers & Assisters
+          </TabsTrigger>
+          <TabsTrigger value="search" className="data-[state=active]:bg-background data-[state=active]:text-fpl-green data-[state=active]:shadow-sm">
+            Player Search
+          </TabsTrigger>
+        </TabsList>
 
-      {searchResults.isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-20 w-full" />
-          ))}
-        </div>
-      )}
+        <TabsContent value="leaders">
+          <LeadersSection />
+        </TabsContent>
 
-      {searchResults.isError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertDescription>Search failed.</AlertDescription>
-        </Alert>
-      )}
+        <TabsContent value="search">
+          <div className="relative mb-6">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by player name... (press Enter)"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearch}
+              className="pl-10 pr-10"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => { setSearch(""); setSearchQuery(""); }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
 
-      {searchResults.data && (
-        <PlayerSearchResults
-          results={searchResults.data as any[]}
-          onSelect={(p) => setSelectedPlayer({ id: p.id, league: p.league })}
-        />
-      )}
+          {searchResults.isLoading && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          )}
 
-      {!searchQuery && (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-lg font-display">Search for a player</p>
-          <p className="text-sm mt-1">View detailed stats across any European league</p>
-        </div>
-      )}
+          {searchResults.isError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>Search failed.</AlertDescription>
+            </Alert>
+          )}
+
+          {searchResults.data && (
+            <PlayerSearchResults
+              results={searchResults.data as any[]}
+              onSelect={(p) => setSelectedPlayer({ id: p.id, league: p.league })}
+            />
+          )}
+
+          {!searchQuery && (
+            <div className="text-center py-12 text-muted-foreground">
+              <p className="text-lg font-display">Search for a player</p>
+              <p className="text-sm mt-1">View detailed stats across any European league</p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

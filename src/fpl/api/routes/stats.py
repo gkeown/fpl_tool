@@ -564,3 +564,110 @@ async def get_player_xg(
 
     xg_result = await _fetch_understat_xg(player_name, country)
     return {"player_id": player_id, **xg_result}
+
+
+# ------------------------------------------------------------------
+# League top scorers & assisters
+# ------------------------------------------------------------------
+
+_LEADER_LEAGUES = [
+    {"slug": "eng.1", "name": "Premier League"},
+    {"slug": "eng.2", "name": "Championship"},
+    {"slug": "esp.1", "name": "La Liga"},
+    {"slug": "ita.1", "name": "Serie A"},
+    {"slug": "ger.1", "name": "Bundesliga"},
+    {"slug": "fra.1", "name": "Ligue 1"},
+]
+
+_ESPN_STATS_BASE = (
+    "https://site.api.espn.com/apis/site/v2/sports/soccer"
+)
+
+
+@router.get("/leaders")
+async def get_leaders(
+    league: str | None = None, top: int = 20
+) -> dict[str, Any]:
+    """Return top scorers and assisters for major European leagues.
+
+    If league is specified, returns leaders for that league only.
+    Otherwise returns all leagues.
+    """
+    leagues_to_fetch = (
+        [{"slug": league, "name": league}]
+        if league
+        else _LEADER_LEAGUES
+    )
+
+    result: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        for lg_info in leagues_to_fetch:
+            slug = lg_info["slug"]
+            try:
+                resp = await client.get(
+                    f"{_ESPN_STATS_BASE}/{slug}/statistics"
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception:
+                continue
+
+            stats = data.get("stats", [])
+            goals_cat = next(
+                (
+                    s
+                    for s in stats
+                    if s.get("name") == "goalsLeaders"
+                ),
+                None,
+            )
+            assists_cat = next(
+                (
+                    s
+                    for s in stats
+                    if s.get("name") == "assistsLeaders"
+                ),
+                None,
+            )
+
+            def _parse_leaders(
+                cat: dict[str, Any] | None,
+            ) -> list[dict[str, Any]]:
+                if not cat:
+                    return []
+                out: list[dict[str, Any]] = []
+                for entry in cat.get("leaders", [])[:top]:
+                    athlete = entry.get("athlete", {})
+                    team = entry.get("team", {})
+                    out.append(
+                        {
+                            "name": athlete.get(
+                                "displayName", ""
+                            ),
+                            "team": team.get(
+                                "displayName", ""
+                            ),
+                            "team_short": team.get(
+                                "abbreviation", ""
+                            ),
+                            "value": entry.get(
+                                "displayValue", ""
+                            ),
+                            "photo": athlete.get(
+                                "headshot", ""
+                            ),
+                        }
+                    )
+                return out
+
+            result.append(
+                {
+                    "league": lg_info["name"],
+                    "slug": slug,
+                    "scorers": _parse_leaders(goals_cat),
+                    "assisters": _parse_leaders(assists_cat),
+                }
+            )
+
+    return {"leagues": result}
