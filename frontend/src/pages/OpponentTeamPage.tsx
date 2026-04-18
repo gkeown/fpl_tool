@@ -156,7 +156,7 @@ export default function OpponentTeamPage() {
   const d = data as any;
   const starters = d.players?.filter((p: any) => p.is_starter) ?? [];
   const bench = d.players?.filter((p: any) => !p.is_starter) ?? [];
-  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0), 0);
+  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0) + (p.gw_bonus || 0), 0);
   const transfers: any[] = d.transfers ?? [];
 
   // Group transfers by gameweek, show last 3 GWs

@@ -232,7 +232,7 @@ export default function MyTeamPage() {
 
   const starters = teamData?.players?.filter((p: any) => p.is_starter) ?? [];
   const bench = teamData?.players?.filter((p: any) => !p.is_starter) ?? [];
-  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0), 0);
+  const xiTotal = starters.reduce((s: number, p: any) => s + (p.gw_points || 0) + (p.gw_bonus || 0), 0);
 
   if (team.isLoading) {
     return (
