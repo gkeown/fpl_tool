@@ -124,7 +124,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         p,
                         {
                             "bps": bps,
-                            "bonus": 0,  # overwritten below from BPS rankings
+                            "bonus": entry.get("provisional_bonus", 0),
                             "goals_scored": per_fix_stats.get("goals_scored", 0),
                             "assists": per_fix_stats.get("assists", 0),
                             "defensive_contribution": per_fix_stats.get(
@@ -144,29 +144,6 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         },
                     )
                 )
-
-        # Compute provisional bonus from live BPS rankings within this fixture.
-        # FPL awards 3/2/1 to the top 3 BPS ranks (ties share the same award;
-        # standard ranking — a tie for 1st means the next rank is 3rd, not 2nd).
-        _bps_order = sorted(
-            range(len(fixture_players)),
-            key=lambda i: fixture_players[i][1].get("bps", 0) or 0,
-            reverse=True,
-        )
-        rank = 1
-        for _list_pos, _fp_idx in enumerate(_bps_order):
-            _bps = fixture_players[_fp_idx][1].get("bps", 0) or 0
-            if _bps <= 0:
-                break
-            if _list_pos > 0:
-                _prev_bps = (
-                    fixture_players[_bps_order[_list_pos - 1]][1].get("bps", 0) or 0
-                )
-                if _bps < _prev_bps:
-                    rank = _list_pos + 1
-            if rank > 3:
-                break
-            fixture_players[_fp_idx][1]["bonus"] = 4 - rank
 
         # Goal scorers
         goal_scorers: list[dict[str, Any]] = []
@@ -294,10 +271,49 @@ async def fetch_live_gameweek() -> dict[str, Any]:
     }
 
 
+def _compute_provisional_bonus(
+    players_by_bps: list[tuple[int, int]],
+) -> dict[int, int]:
+    """Compute provisional bonus from BPS rankings.
+
+    Mirrors the algorithm in team.py so both views stay consistent.
+    Uses standard ranking with gaps: a 2-way tie for 1st means the
+    next distinct BPS value is 3rd, not 2nd.
+    """
+    sorted_players = sorted(
+        [(pid, bps) for pid, bps in players_by_bps if bps > 0],
+        key=lambda x: -x[1],
+    )
+    if not sorted_players:
+        return {}
+    result: dict[int, int] = {}
+    rank_points = [3, 2, 1]
+    i = 0
+    rank_idx = 0
+    n = len(sorted_players)
+    while i < n and rank_idx < 3:
+        cur_bps = sorted_players[i][1]
+        tied: list[int] = [sorted_players[i][0]]
+        j = i + 1
+        while j < n and sorted_players[j][1] == cur_bps:
+            tied.append(sorted_players[j][0])
+            j += 1
+        points = rank_points[rank_idx]
+        for pid in tied:
+            result[pid] = points
+        rank_idx += len(tied)
+        i = j
+    return result
+
+
 async def _fetch_live_gw_with_explain(
     gw: int,
 ) -> dict[int, dict[str, Any]]:
-    """Fetch live GW data from FPL API, keeping explain + stats."""
+    """Fetch live GW data from FPL API, keeping explain + stats.
+
+    Provisional bonus is computed here from ALL players in each fixture
+    (not filtered by our DB) so the ranking matches what FPL shows.
+    """
     import httpx
 
     from fpl.config import get_settings
@@ -316,12 +332,32 @@ async def _fetch_live_gw_with_explain(
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
+            elements = data.get("elements", [])
+
+            # Group all players by fixture and compute provisional bonus
+            # using every player FPL knows about — matches My Team's approach.
+            by_fixture: dict[int, list[tuple[int, int]]] = {}
+            for el in elements:
+                explain = el.get("explain", [])
+                if not explain:
+                    continue
+                fixture_id = explain[0].get("fixture")
+                if fixture_id is None:
+                    continue
+                bps = el.get("stats", {}).get("bps", 0) or 0
+                by_fixture.setdefault(fixture_id, []).append((el["id"], bps))
+
+            provisional: dict[int, int] = {}
+            for _fid, players in by_fixture.items():
+                provisional.update(_compute_provisional_bonus(players))
+
             return {
                 el["id"]: {
                     "stats": el.get("stats", {}),
                     "explain": el.get("explain", []),
+                    "provisional_bonus": provisional.get(el["id"], 0),
                 }
-                for el in data.get("elements", [])
+                for el in elements
             }
     except Exception:
         return {}

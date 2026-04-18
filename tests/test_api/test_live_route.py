@@ -125,7 +125,11 @@ def _explain_entry(
 
 
 async def _mock_live_fetch(gw: int) -> dict:
-    """Mock FPL live endpoint response (all players in fixture 500)."""
+    """Mock FPL live endpoint response (all players in fixture 500).
+
+    provisional_bonus is pre-computed from BPS rankings across all players:
+    Saka 60 → 3, Haaland 45 → 2, Gabriel 35 → 1, Dias 20 → 0.
+    """
     return {
         100: {  # Saka: 2 goals, 60 BPS, 3 bonus, 5 DEFCON
             "stats": {"bps": 60},
@@ -134,6 +138,7 @@ async def _mock_live_fetch(gw: int) -> dict:
                     500, goals=2, bonus=3, defcon=5, points=15
                 )
             ],
+            "provisional_bonus": 3,
         },
         101: {  # Gabriel: 1 assist, 35 BPS, 1 bonus, 14 DEFCON
             "stats": {"bps": 35},
@@ -142,6 +147,7 @@ async def _mock_live_fetch(gw: int) -> dict:
                     500, assists=1, bonus=1, defcon=14, points=8
                 )
             ],
+            "provisional_bonus": 1,
         },
         200: {  # Haaland: 1 goal, 45 BPS, 2 bonus, 3 DEFCON
             "stats": {"bps": 45},
@@ -150,12 +156,14 @@ async def _mock_live_fetch(gw: int) -> dict:
                     500, goals=1, bonus=2, defcon=3, points=10
                 )
             ],
+            "provisional_bonus": 2,
         },
         201: {  # Dias: 20 BPS, 10 DEFCON
             "stats": {"bps": 20},
             "explain": [
                 _explain_entry(500, defcon=10, points=3)
             ],
+            "provisional_bonus": 0,
         },
     }
 
