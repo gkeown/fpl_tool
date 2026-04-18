@@ -453,8 +453,8 @@ async def _mock_live_fetch_dgw(gw: int) -> dict:
     """Mock DGW: Saka has TWO explain entries (one per fixture).
 
     Goals/assists/DEFCON/bonus must be attributed to the correct
-    fixture. BPS is top-level only (not fixture-splittable) and is
-    intentionally zeroed for DGW players.
+    fixture. BPS is top-level (aggregate across all fixtures for DGW
+    players) and is always included in the top BPS ranking.
     """
     return {
         100: {  # Saka: 1 goal in fix 500, 2 goals in fix 501
@@ -463,14 +463,17 @@ async def _mock_live_fetch_dgw(gw: int) -> dict:
                 _explain_entry(500, goals=1, defcon=5, points=8),
                 _explain_entry(501, goals=2, bonus=3, points=15),
             ],
+            "provisional_bonus": 3,
         },
         200: {  # Haaland: fix 500 only
             "stats": {"bps": 20},
             "explain": [_explain_entry(500, points=2)],
+            "provisional_bonus": 0,
         },
         300: {  # Palmer: fix 501 only
             "stats": {"bps": 40},
             "explain": [_explain_entry(501, goals=1, bonus=2, points=10)],
+            "provisional_bonus": 2,
         },
     }
 
@@ -514,14 +517,19 @@ async def test_live_gameweek_dgw_attribution(
     assert len(saka_501) == 2
     assert len(palmer_501) == 1
 
-    # BPS: Haaland's 20 in fix 500. Saka is DGW so bps=0 (excluded).
+    # BPS: Saka 85 (DGW aggregate) tops fix 500, Haaland 20 second.
+    # DGW players use aggregate top-level BPS — best approximation available.
     fix_500_bps = fix_500["top_bps"]
-    assert len(fix_500_bps) == 1
-    assert fix_500_bps[0]["player"] == "Haaland"
-    assert fix_500_bps[0]["bps"] == 20
+    assert len(fix_500_bps) == 2
+    assert fix_500_bps[0]["player"] == "Saka"
+    assert fix_500_bps[0]["bps"] == 85
+    assert fix_500_bps[1]["player"] == "Haaland"
+    assert fix_500_bps[1]["bps"] == 20
 
-    # Fixture 501: Palmer 40 (Saka excluded due to DGW)
+    # Fixture 501: Saka 85 (DGW aggregate) tops, Palmer 40 second.
     fix_501_bps = fix_501["top_bps"]
-    assert len(fix_501_bps) == 1
-    assert fix_501_bps[0]["player"] == "Palmer"
-    assert fix_501_bps[0]["bps"] == 40
+    assert len(fix_501_bps) == 2
+    assert fix_501_bps[0]["player"] == "Saka"
+    assert fix_501_bps[0]["bps"] == 85
+    assert fix_501_bps[1]["player"] == "Palmer"
+    assert fix_501_bps[1]["bps"] == 40

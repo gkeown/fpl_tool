@@ -114,8 +114,10 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             # BPS is not in the explain breakdown — pull from top-level stats.
             # Bonus is computed from BPS rankings after all players are
             # collected (see _compute_provisional_bonus below).
+            # top_stats.bps is always the total accumulated BPS for this GW,
+            # which is correct even for DGW players (both fixtures combined).
             is_single_fixture = len(explain) == 1
-            bps = top_stats.get("bps", 0) or 0 if is_single_fixture else 0
+            bps = top_stats.get("bps", 0) or 0
 
             p = player_snapshots.get(pid)
             if p:
