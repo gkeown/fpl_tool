@@ -6,7 +6,8 @@ A data-driven Fantasy Premier League dashboard for personal use. Aggregates data
 
 ### FPL Dashboard
 - **Dashboard** — GW points (live XI total), captain picks, match predictions, news
-- **My Team** — Full squad with live GW points, provisional bonus, DEFCON, form, xPts, chip usage
+- **My Team** — Full squad with live GW points, provisional bonus, DEFCON, form, xPts, chip usage. Double gameweek fixtures highlighted
+- **Live Gameweek** — Real-time GW view with goal scorers, BPS leaders, and DEFCON contributors
 - **Mini Leagues** — Subscribe to leagues, view standings, drill into opponent teams with transfers and chip history
 - **Players** — Form rankings, player search, detailed player cards with charts and fixture difficulty
 - **Fixtures** — FDR heatmap, goal predictions, betting odds
@@ -15,34 +16,41 @@ A data-driven Fantasy Premier League dashboard for personal use. Aggregates data
 - **Captain** — Captain recommendations with scoring breakdowns
 
 ### Live Football
-- **Live Scores** — Current matchweek fixtures for PL, Serie A, La Liga, Bundesliga, Ligue 1 with goal scorers, red cards, and live minute tracking
+- **Live Scores** — Current matchweek fixtures for PL, Serie A, La Liga, Bundesliga, Ligue 1, plus Champions League, Europa League, and Conference League with goal scorers, red cards, and live minute tracking
+- **Match Detail** — Clickable match view with full lineups, substitutions, team stats, and goal/card events
 - **League Tables** — Standings for 6 leagues (PL, Championship, Serie A, La Liga, Bundesliga, Ligue 1) with qualification zone highlighting
 - **Player Stats** — Search any player across European leagues for current season stats (goals, assists, shots, tackles, cards) with xG/xA from Understat
 
+### Auth & Multi-tenant
+- **JWT auth** — Admin and guest roles. Admin has full access; guests enter a code and configure their own FPL team + leagues
+- **Per-user data** — Each user's team picks, league subscriptions, and account data stored separately
+
 ### Automation
-- **Auto-refresh** — Server-side scheduler refreshes FPL data every 5 min and scores every 60s during match windows (Sat/Sun/Mon)
+- **Auto-refresh** — Scheduler refreshes FPL data every 60s, scores every 30s, and live GW every 60s during match windows (Sat/Sun 12:00–23:00, Mon–Fri 19:00–23:00 for European fixtures)
 - **Auto-setup** — Team and leagues load automatically from `.env` on first startup
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   React Frontend                         │
-│  Dashboard · My Team · Leagues · Scores · Tables · Stats │
-│  Players · Fixtures · Transfers · Prices · Settings      │
-├─────────────────────────────────────────────────────────┤
-│                   FastAPI Backend                         │
-│  /api/me    /api/leagues   /api/scores   /api/stats      │
-│  /api/players  /api/fixtures  /api/transfers  /api/data  │
-│  /api/captain  /api/predict   /api/prices                │
-├─────────────────────────────────────────────────────────┤
-│  Ingest Layer          │  Analysis Layer                  │
-│  FPL API · Understat   │  Form · FDR · Predictions       │
-│  Odds · Projections    │  Captaincy · Transfers           │
-│  Injuries · Leagues    │  Team Analysis · Differentials   │
-├─────────────────────────────────────────────────────────┤
-│  SQLite (SQLAlchemy 2.0)  │  APScheduler (auto-refresh)  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      React Frontend (19 pages)                │
+│  Dashboard · My Team · Live GW · Leagues · Scores · Tables   │
+│  Players · Fixtures · Transfers · Prices · Captain · Stats    │
+│  Match Detail · Settings · Login · Guest Setup                │
+├──────────────────────────────────────────────────────────────┤
+│                      FastAPI Backend                          │
+│  /api/auth  /api/team  /api/leagues  /api/scores  /api/live  │
+│  /api/players  /api/fixtures  /api/transfers  /api/data      │
+│  /api/captain  /api/predict  /api/prices  /api/stats         │
+├──────────────────────────────────────────────────────────────┤
+│  Ingest Layer              │  Analysis Layer                  │
+│  FPL API · Understat       │  Form · FDR · Predictions        │
+│  ESPN · Odds · Projections │  Captaincy · Transfers           │
+│  Injuries · Leagues        │  Team Analysis · Differentials   │
+├──────────────────────────────────────────────────────────────┤
+│  SQLite WAL (SQLAlchemy 2.0)  │  APScheduler (3 concurrent jobs)│
+│  JWT Auth (admin + guest)     │  Docker (multi-stage, port 3001)│
+└──────────────────────────────────────────────────────────────┘
 
 External Data Sources:
 ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
@@ -105,6 +113,9 @@ All settings use the `FPL_` prefix. Set via `.env` or environment variables.
 | `FPL_ID` | `0` | Your FPL team ID (auto-loaded on startup) |
 | `FPL_LEAGUE_IDS` | _(empty)_ | Comma-separated league IDs to auto-subscribe |
 | `FPL_DB_PATH` | `data/fpl.db` | SQLite database path |
+| `FPL_ADMIN_PASSWORD` | _(required)_ | Admin login password |
+| `FPL_GUEST_CODE` | _(optional)_ | Guest access code |
+| `FPL_JWT_SECRET` | _(required)_ | Secret key for signing JWT tokens |
 | `FPL_ODDS_API_KEY` | _(empty)_ | API key for the-odds-api.com (optional) |
 | `FPL_API_FOOTBALL_KEY` | _(empty)_ | API-Football key for historical stats + PL assists (optional) |
 | `FPL_AUTO_REFRESH` | `true` | Auto-refresh during match windows |
