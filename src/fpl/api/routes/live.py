@@ -328,7 +328,11 @@ async def _fetch_live_gw_with_explain(
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            url = f"{settings.fpl_base_url}/event/{gw}/live/"
+            import time
+
+            # Timestamp param forces a unique URL on every request,
+            # bypassing CDN edge caches that ignore Cache-Control headers.
+            url = f"{settings.fpl_base_url}/event/{gw}/live/?_={int(time.time())}"
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()

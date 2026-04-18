@@ -77,12 +77,18 @@ async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
     the match is in progress and the confirmed `bonus` field is 0.
     """
     settings = get_settings()
-    headers = {"User-Agent": settings.user_agent}
+    import time
+
+    headers = {
+        "User-Agent": settings.user_agent,
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
     try:
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            url = f"{settings.fpl_base_url}/event/{gw}/live/"
+            url = f"{settings.fpl_base_url}/event/{gw}/live/?_={int(time.time())}"
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.json()
@@ -103,24 +109,18 @@ async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
                 if fixture_id is None:
                     continue
                 bps = el.get("stats", {}).get("bps", 0) or 0
-                by_fixture.setdefault(fixture_id, []).append(
-                    (pid, bps)
-                )
+                by_fixture.setdefault(fixture_id, []).append((pid, bps))
                 player_fixture[pid] = fixture_id
 
             # Compute provisional bonus per fixture
             provisional: dict[int, int] = {}
             for _fid, players in by_fixture.items():
-                provisional.update(
-                    _compute_provisional_bonus(players)
-                )
+                provisional.update(_compute_provisional_bonus(players))
 
             return {
                 el["id"]: {
                     **el.get("stats", {}),
-                    "provisional_bonus": provisional.get(
-                        el["id"], 0
-                    ),
+                    "provisional_bonus": provisional.get(el["id"], 0),
                 }
                 for el in elements
             }
@@ -154,17 +154,13 @@ async def get_team(
 
         current_gw = get_current_gameweek(session)
         account: MyAccount | None = (
-            session.query(MyAccount)
-            .filter(MyAccount.user_id == user_id)
-            .first()
+            session.query(MyAccount).filter(MyAccount.user_id == user_id).first()
         )
 
         # Build opponent + live fixture lookup from current GW fixtures
         all_teams = {t.fpl_id: t.short_name for t in session.query(Team).all()}
         gw_fixtures: list[Fixture] = (
-            session.query(Fixture)
-            .filter(Fixture.gameweek == current_gw)
-            .all()
+            session.query(Fixture).filter(Fixture.gameweek == current_gw).all()
         )
 
         # Next 5 fixtures per team (GW+1 onwards)
@@ -189,12 +185,8 @@ async def get_team(
                 "is_home": False,
                 "fdr": fix.team_a_difficulty,
             }
-            next_fixtures_by_team.setdefault(fix.team_h, []).append(
-                home_entry
-            )
-            next_fixtures_by_team.setdefault(fix.team_a, []).append(
-                away_entry
-            )
+            next_fixtures_by_team.setdefault(fix.team_h, []).append(home_entry)
+            next_fixtures_by_team.setdefault(fix.team_a, []).append(away_entry)
         # Limit to 5 per team
         for tid in next_fixtures_by_team:
             # Cap at 10 entries to cover 5 unique GWs even with DGWs
@@ -225,10 +217,7 @@ async def get_team(
         ) -> str:
             if not opps:
                 return "-"
-            return ", ".join(
-                f"{o} (H)" if h else f"{o} (A)"
-                for o, h in opps
-            )
+            return ", ".join(f"{o} (H)" if h else f"{o} (A)" for o, h in opps)
 
         # Snapshot DB data while session is open
         db_players: list[dict[str, Any]] = []
@@ -250,9 +239,7 @@ async def get_team(
                     "defcon": player.defensive_contribution,
                     "opponent": _format_opponents(opps),
                     "is_dgw": len(opps) > 1,
-                    "next_fixtures": next_fixtures_by_team.get(
-                        player.team_id, []
-                    ),
+                    "next_fixtures": next_fixtures_by_team.get(player.team_id, []),
                     "status": player.status,
                     "chance_of_playing": player.chance_of_playing_next,
                     "news": player.news,
@@ -287,9 +274,7 @@ async def get_team(
         live_pts = live_stats.get("total_points")
         confirmed_bonus = live_stats.get("bonus", 0) or 0
         provisional_bonus = live_stats.get("provisional_bonus", 0) or 0
-        live_bonus = (
-            confirmed_bonus if confirmed_bonus > 0 else provisional_bonus
-        )
+        live_bonus = confirmed_bonus if confirmed_bonus > 0 else provisional_bonus
         live_defcon = live_stats.get("defensive_contribution", 0)
         live_minutes = live_stats.get("minutes", 0)
         live_yellow = live_stats.get("yellow_cards", 0)
