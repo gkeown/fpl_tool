@@ -189,7 +189,7 @@ export default function LiveGameweekPage() {
 
   const data = live.data as any;
   const fixtures = data?.fixtures ?? [];
-  const cachedAt = data?.cached_at || live.dataUpdatedAt;
+  const cachedAt = data?.fetched_at || live.dataUpdatedAt;
   const lastUpdated = cachedAt
     ? new Date(typeof cachedAt === "string" ? cachedAt : cachedAt).toLocaleTimeString([], {
         hour: "2-digit",

@@ -19,8 +19,7 @@ from fpl.db.models import Fixture, Player, Team
 
 router = APIRouter()
 
-# In-memory cache
-_live_cache: dict[str, Any] = {}
+# Last-fetched timestamp — read by data.py for the Settings page
 _live_cache_updated_at: str = ""
 
 
@@ -320,67 +319,23 @@ async def _fetch_live_gw_with_explain(
         return {}
 
 
-_CACHE_MAX_AGE_SECS = 300  # 5 min — avoid serving stale data indefinitely
-
-
 async def refresh_live_cache() -> None:
-    """Refresh the in-memory live gameweek cache.
+    """Called by the scheduler during match windows.
 
-    If the fetch returns an empty/failed result, keep the existing
-    cache rather than overwriting with stale empty data.
+    No longer maintains a cache — the endpoint always fetches fresh.
+    Kept so the scheduler import continues to work; updates the
+    timestamp read by the Settings page.
     """
-    global _live_cache, _live_cache_updated_at
-    result = await fetch_live_gameweek()
-    # Don't clobber good cache with empty response on transient failures
-    if not result.get("fixtures") and _live_cache.get("fixtures"):
-        return
-    _live_cache = result
+    global _live_cache_updated_at
+    await fetch_live_gameweek()
     _live_cache_updated_at = datetime.now(UTC).isoformat()
 
 
-def _cache_is_fresh() -> bool:
-    """Check if the cache is within the max age window."""
-    if not _live_cache or not _live_cache_updated_at:
-        return False
-    try:
-        updated = datetime.fromisoformat(_live_cache_updated_at)
-        age = (datetime.now(UTC) - updated).total_seconds()
-        return age < _CACHE_MAX_AGE_SECS
-    except (ValueError, TypeError):
-        return False
-
-
-def _cache_gw_matches(current_gw: int | None) -> bool:
-    """Check if the cached GW matches the current GW."""
-    if not _live_cache:
-        return False
-    return _live_cache.get("gameweek") == current_gw
-
-
 @router.get("/gameweek")
-async def get_live_gameweek(force: bool = False) -> dict[str, Any]:
-    """Return current gameweek fixtures with live stats.
-
-    Serves from cache when fresh. Re-fetches when:
-    - force=true
-    - cache is empty
-    - cache is older than 5 minutes
-    - cached gameweek differs from current (GW rollover)
-    """
-    global _live_cache, _live_cache_updated_at
-
-    # Determine current GW for cache invalidation
-    with get_session() as session:
-        current_gw = get_current_gameweek(session)
-
-    use_cache = not force and _cache_is_fresh() and _cache_gw_matches(current_gw)
-    if use_cache:
-        return {**_live_cache, "cached_at": _live_cache_updated_at}
-
+async def get_live_gameweek() -> dict[str, Any]:
+    """Return current gameweek fixtures with live stats from FPL API."""
+    global _live_cache_updated_at
     result = await fetch_live_gameweek()
-    # Only update cache if fetch produced non-empty data
-    if result.get("fixtures") or not _live_cache.get("fixtures"):
-        _live_cache = result
-        _live_cache_updated_at = datetime.now(UTC).isoformat()
-
-    return {**result, "cached_at": _live_cache_updated_at}
+    now = datetime.now(UTC).isoformat()
+    _live_cache_updated_at = now
+    return {**result, "fetched_at": now}
