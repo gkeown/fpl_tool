@@ -584,17 +584,14 @@ async def _fetch_league_form(
     Returns {team_id: ["W","D","L","W","W"]} ordered oldest first.
     """
     today = datetime.now(UTC).date()
-    # ESPN scoreboard returns only events on the exact requested date, so we
-    # must sample frequently enough to catch every matchday. A 3-day step
-    # covers midweek fixtures (Tue/Wed/Thu) that weekly sampling would miss.
-    # 90-day lookback handles international breaks where teams may go 3+ weeks
-    # without a league fixture (~30 requests per league, run in parallel).
-    date_strings: list[str] = []
-    step = 0
-    while step <= lookback_days:
-        sample_date = today - timedelta(days=step)
-        date_strings.append(sample_date.strftime("%Y%m%d"))
-        step += 3
+    # ESPN scoreboard returns events for exactly one date per request, so we
+    # must fetch every calendar day to avoid missing any matchday. asyncio.gather
+    # runs all requests in parallel, so wall time ≈ one round-trip regardless
+    # of window size. 90 days covers international breaks (~2-3 blank weeks).
+    date_strings = [
+        (today - timedelta(days=d)).strftime("%Y%m%d")
+        for d in range(lookback_days + 1)
+    ]
 
     async def _fetch_one(date_str: str) -> list[dict[str, Any]]:
         try:
