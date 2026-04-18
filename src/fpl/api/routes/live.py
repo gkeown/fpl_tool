@@ -112,10 +112,19 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 per_fix_stats[ident] = s.get("value", 0) or 0
                 per_fix_points += s.get("points", 0) or 0
 
-            # BPS isn't in explain — pull from top-level stats
-            # (accurate for single-fixture GW; DGW approximation)
+            # BPS and provisional bonus are not in the explain breakdown
+            # during live matches — they only appear in top-level stats.
+            # Explain bonus is 0 until the match is finalised by FPL.
             is_single_fixture = len(explain) == 1
             bps = top_stats.get("bps", 0) or 0 if is_single_fixture else 0
+            # Provisional bonus lives in top_stats during live games;
+            # finalized bonus appears in explain after FPL confirms it.
+            # Prefer top_stats (covers both states), fall back to explain.
+            bonus = (
+                top_stats.get("bonus", 0) or per_fix_stats.get("bonus", 0)
+                if is_single_fixture
+                else per_fix_stats.get("bonus", 0)
+            )
 
             p = player_snapshots.get(pid)
             if p:
@@ -124,7 +133,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         p,
                         {
                             "bps": bps,
-                            "bonus": per_fix_stats.get("bonus", 0),
+                            "bonus": bonus,
                             "goals_scored": per_fix_stats.get("goals_scored", 0),
                             "assists": per_fix_stats.get("assists", 0),
                             "defensive_contribution": per_fix_stats.get(
