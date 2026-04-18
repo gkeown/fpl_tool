@@ -11,6 +11,9 @@ services:
       - FPL_DB_PATH=/app/data/fpl.db
       - FPL_FRONTEND_DIR=/app/frontend/dist
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
 volumes:
   fpl-data:
