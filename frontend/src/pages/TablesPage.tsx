@@ -40,6 +40,28 @@ function getZoneClass(zone: string): string {
   return "";
 }
 
+function FormBadges({ form }: { form?: string[] }) {
+  if (!form || form.length === 0) return <span className="text-muted-foreground text-xs">—</span>;
+  return (
+    <div className="flex gap-0.5 justify-center">
+      {form.map((result, i) => {
+        const colours =
+          result === "W" ? "bg-fpl-green text-white" :
+          result === "D" ? "bg-fpl-gold text-black" :
+          "bg-fpl-pink text-white";
+        return (
+          <span
+            key={i}
+            className={`inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold ${colours}`}
+          >
+            {result}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 function LeagueTable({ table }: { table: any[] }) {
   return (
     <div className="rounded-lg border overflow-hidden">
@@ -55,6 +77,7 @@ function LeagueTable({ table }: { table: any[] }) {
             <th className="text-center px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">GF</th>
             <th className="text-center px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">GA</th>
             <th className="text-center px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-10">GD</th>
+            <th className="hidden sm:table-cell text-center px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-32">Form</th>
             <th className="text-center px-2 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground w-12">Pts</th>
           </tr>
         </thead>
@@ -85,6 +108,9 @@ function LeagueTable({ table }: { table: any[] }) {
                   <span className={row.gd > 0 ? "text-fpl-green" : row.gd < 0 ? "text-fpl-pink" : ""}>
                     {row.gd > 0 ? `+${row.gd}` : row.gd}
                   </span>
+                </td>
+                <td className="hidden sm:table-cell text-center px-2 py-1.5">
+                  <FormBadges form={row.form ?? []} />
                 </td>
                 <td className="text-center px-2 py-1.5 text-sm font-bold tabular-nums">{row.points}</td>
               </tr>

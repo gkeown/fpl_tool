@@ -7,6 +7,7 @@ Premier League when API-Football key is configured.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -393,6 +394,7 @@ def _parse_standing(entry: dict[str, Any]) -> dict[str, Any]:
     note = entry.get("note", {})
     return {
         "position": _get_stat(entry, "rank"),
+        "team_id": str(team_info.get("id", "")),
         "team": team_info.get("displayName", ""),
         "team_short": team_info.get("abbreviation", ""),
         "played": _get_stat(entry, "gamesPlayed"),
@@ -512,11 +514,124 @@ def _apply_live_results(
     return table
 
 
+def _compute_team_form(
+    events: list[dict[str, Any]], team_id: str
+) -> list[str]:
+    """Return last 5 W/D/L results for a team from ESPN event dicts.
+
+    events: list of ESPN scoreboard events (any state; function filters)
+    team_id: ESPN team ID string to look up in each event's competitors
+    Returns: list of "W"/"D"/"L", ordered oldest first, length <= 5
+    """
+    finished: list[dict[str, Any]] = []
+    for event in events:
+        comp = event.get("competitions", [{}])[0]
+        status_type = event.get("status", {}).get("type", {})
+        state = status_type.get("state", "")
+        if state != "post":
+            continue
+        competitors = comp.get("competitors", [])
+        # Require both competitors to have a non-None, non-empty score
+        scores_valid = all(
+            c.get("score") not in (None, "") for c in competitors
+        )
+        if not scores_valid or len(competitors) != 2:
+            continue
+        finished.append(event)
+
+    # Sort ascending by event date ISO string
+    finished.sort(key=lambda e: e.get("date", ""))
+
+    results: list[str] = []
+    for event in finished:
+        comp = event.get("competitions", [{}])[0]
+        competitors = comp.get("competitors", [])
+        our = next(
+            (c for c in competitors if str(c.get("id", "")) == team_id),
+            None,
+        )
+        if our is None:
+            continue
+        other = next(
+            (c for c in competitors if str(c.get("id", "")) != team_id),
+            None,
+        )
+        if other is None:
+            continue
+        try:
+            our_score = int(our["score"])
+            other_score = int(other["score"])
+        except (ValueError, TypeError, KeyError):
+            continue
+
+        if our_score > other_score:
+            results.append("W")
+        elif our_score < other_score:
+            results.append("L")
+        else:
+            results.append("D")
+
+    return results[-5:]
+
+
+async def _fetch_league_form(
+    client: httpx.AsyncClient,
+    slug: str,
+    lookback_days: int = 63,
+) -> dict[str, list[str]]:
+    """Fetch last 5 results per team for a league from ESPN scoreboard history.
+
+    Returns {team_id: ["W","D","L","W","W"]} ordered oldest first.
+    """
+    today = datetime.now(UTC).date()
+    # Generate weekly sample points going back lookback_days days.
+    # ESPN scoreboard returns events around each date, so weekly steps
+    # avoid redundant requests while covering the full window (~9 calls).
+    date_strings: list[str] = []
+    step = 0
+    while step <= lookback_days:
+        sample_date = today - timedelta(days=step)
+        date_strings.append(sample_date.strftime("%Y%m%d"))
+        step += 7
+
+    async def _fetch_one(date_str: str) -> list[dict[str, Any]]:
+        try:
+            return await _fetch_espn_league(client, slug, date_str)
+        except Exception:
+            return []
+
+    results_list = await asyncio.gather(*[_fetch_one(d) for d in date_strings])
+
+    # Deduplicate events by ID
+    seen_ids: set[str] = set()
+    all_events: list[dict[str, Any]] = []
+    for events in results_list:
+        for event in events:
+            eid = event.get("id", "")
+            if eid and eid not in seen_ids:
+                seen_ids.add(eid)
+                all_events.append(event)
+
+    # Collect all team IDs seen
+    team_ids: set[str] = set()
+    for event in all_events:
+        comp = event.get("competitions", [{}])[0]
+        for c in comp.get("competitors", []):
+            tid = str(c.get("id", ""))
+            if tid:
+                team_ids.add(tid)
+
+    return {
+        tid: _compute_team_form(all_events, tid) for tid in team_ids
+    }
+
+
 async def fetch_standings() -> dict[str, Any]:
     """Fetch standings for all leagues from ESPN + apply live updates."""
     leagues_out: list[dict[str, Any]] = []
 
     today = datetime.now(UTC).strftime("%Y%m%d")
+    settings = get_settings()
 
     async with httpx.AsyncClient(timeout=15) as client:
         for league_info in _STANDINGS_LEAGUES:
@@ -537,6 +652,17 @@ async def fetch_standings() -> dict[str, Any]:
                 table = _apply_live_results(table, events)
             except Exception:
                 table.sort(key=lambda t: t["position"])
+
+            # Fetch form (last 5 results) per team
+            try:
+                form_map = await _fetch_league_form(
+                    client, league_info["slug"]
+                )
+                for row in table:
+                    row["form"] = form_map.get(row.get("team_id", ""), [])
+            except Exception:
+                for row in table:
+                    row["form"] = []
 
             if table:
                 leagues_out.append(
