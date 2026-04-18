@@ -137,11 +137,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                                 if is_single_fixture
                                 else per_fix_stats.get("minutes", 0)
                             ),
-                            "saves": (
-                                top_stats.get("saves", 0) or 0
-                                if is_single_fixture
-                                else per_fix_stats.get("saves", 0)
-                            ),
+                            "saves": top_stats.get("saves", 0) or 0,
                             "total_points": per_fix_points,
                         },
                     )
