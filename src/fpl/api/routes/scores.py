@@ -577,22 +577,24 @@ def _compute_team_form(
 async def _fetch_league_form(
     client: httpx.AsyncClient,
     slug: str,
-    lookback_days: int = 63,
+    lookback_days: int = 90,
 ) -> dict[str, list[str]]:
     """Fetch last 5 results per team for a league from ESPN scoreboard history.
 
     Returns {team_id: ["W","D","L","W","W"]} ordered oldest first.
     """
     today = datetime.now(UTC).date()
-    # Generate weekly sample points going back lookback_days days.
-    # ESPN scoreboard returns events around each date, so weekly steps
-    # avoid redundant requests while covering the full window (~9 calls).
+    # ESPN scoreboard returns only events on the exact requested date, so we
+    # must sample frequently enough to catch every matchday. A 3-day step
+    # covers midweek fixtures (Tue/Wed/Thu) that weekly sampling would miss.
+    # 90-day lookback handles international breaks where teams may go 3+ weeks
+    # without a league fixture (~30 requests per league, run in parallel).
     date_strings: list[str] = []
     step = 0
     while step <= lookback_days:
         sample_date = today - timedelta(days=step)
         date_strings.append(sample_date.strftime("%Y%m%d"))
-        step += 7
+        step += 3
 
     async def _fetch_one(date_str: str) -> list[dict[str, Any]]:
         try:
