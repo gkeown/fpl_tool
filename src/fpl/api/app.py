@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -115,12 +116,27 @@ async def _auto_setup() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    import logging
+
+    logger = logging.getLogger(__name__)
     init_db()
-    await _auto_setup()
+
+    def _log_setup_error(task: asyncio.Task[None]) -> None:
+        if not task.cancelled() and (exc := task.exception()):
+            logger.error("_auto_setup failed: %s", exc)
+
+    setup_task = asyncio.create_task(_auto_setup())
+    setup_task.add_done_callback(_log_setup_error)
+
     from fpl.scheduler import start_scheduler, stop_scheduler
 
     start_scheduler()
     yield
+    setup_task.cancel()
+    try:
+        await setup_task
+    except (asyncio.CancelledError, Exception):
+        pass
     stop_scheduler()
 
 

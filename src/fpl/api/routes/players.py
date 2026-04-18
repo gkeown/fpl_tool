@@ -63,16 +63,32 @@ def get_form(
         rows.sort(key=lambda r: float(r[0].form), reverse=True)
         rows = rows[:top]
 
+        # Fetch recent stats for all players in a single query, then
+        # group in Python — avoids N+1 queries (one per player).
+        player_ids = [p.fpl_id for p, _ in rows]
+        all_recent: list[PlayerGameweekStats] = (
+            session.query(PlayerGameweekStats)
+            .filter(PlayerGameweekStats.player_id.in_(player_ids))
+            .order_by(
+                PlayerGameweekStats.player_id,
+                PlayerGameweekStats.gameweek.desc(),
+            )
+            .all()
+        )
+
+        # Group by player_id, keeping at most 5 most-recent rows each
+        from collections import defaultdict
+
+        stats_by_player: dict[int, list[PlayerGameweekStats]] = defaultdict(list)
+        for s in all_recent:
+            bucket = stats_by_player[s.player_id]
+            if len(bucket) < 5:
+                bucket.append(s)
+
         records: list[dict[str, Any]] = []
         for rank, (player, team) in enumerate(rows, 1):
             fpl_form = float(player.form)
-            recent_stats: list[PlayerGameweekStats] = (
-                session.query(PlayerGameweekStats)
-                .filter(PlayerGameweekStats.player_id == player.fpl_id)
-                .order_by(PlayerGameweekStats.gameweek.desc())
-                .limit(5)
-                .all()
-            )
+            recent_stats = stats_by_player[player.fpl_id]
             total_mins = sum(s.minutes for s in recent_stats)
             records.append(
                 {

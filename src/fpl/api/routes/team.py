@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fpl.analysis.form import get_current_gameweek
 from fpl.analysis.team import analyse_team
 from fpl.auth import get_current_user
+from fpl.cache.live_gw import get_live_gw
 from fpl.cli.formatters import position_str
 from fpl.config import get_settings
 from fpl.db.engine import get_session
@@ -25,117 +28,34 @@ from fpl.db.models import (
 router = APIRouter()
 
 
-def _compute_provisional_bonus(
-    players_by_bps: list[tuple[int, int]],
-) -> dict[int, int]:
-    """Compute provisional bonus points from BPS rankings.
-
-    Top 3 BPS get 3/2/1 bonus, handling ties per FPL rules:
-    - Tie for 1st (2 players): both get 3, next player gets 1
-    - Tie for 2nd (2 players): both get 2, no 3rd place bonus
-    - Tie for 1st (3+ players): all get 3
-
-    Args:
-        players_by_bps: list of (player_id, bps) tuples
-
-    Returns:
-        {player_id: bonus_points} for players earning 1, 2, or 3
-    """
-    sorted_players = sorted(
-        [(pid, bps) for pid, bps in players_by_bps if bps > 0],
-        key=lambda x: -x[1],
-    )
-    if not sorted_players:
-        return {}
-
-    result: dict[int, int] = {}
-    rank_points = [3, 2, 1]
-    i = 0
-    rank_idx = 0
-    n = len(sorted_players)
-    while i < n and rank_idx < 3:
-        cur_bps = sorted_players[i][1]
-        # Find all players tied at this BPS
-        tied: list[int] = [sorted_players[i][0]]
-        j = i + 1
-        while j < n and sorted_players[j][1] == cur_bps:
-            tied.append(sorted_players[j][0])
-            j += 1
-        points = rank_points[rank_idx]
-        for pid in tied:
-            result[pid] = points
-        rank_idx += len(tied)
-        i = j
-    return result
-
 
 async def _fetch_live_gw(gw: int) -> dict[int, dict[str, Any]]:
-    """Fetch live GW data from FPL API. Returns {player_id: stats}.
+    """Return live GW stats for all players, keyed by player ID.
 
-    Injects a `provisional_bonus` field into each player's stats
-    computed from the BPS ranking within their fixture. Used when
-    the match is in progress and the confirmed `bonus` field is 0.
+    Delegates to the shared live-GW cache (src/fpl/cache/live_gw.py) which
+    uses _fetch_live_gw_with_explain from live.py as its fetcher.  The cached
+    format is {player_id: {stats, explain, provisional_bonus}}; this function
+    projects each entry down to the flat stats dict that get_team expects:
+    {**stats, provisional_bonus}.
     """
-    settings = get_settings()
-    import time
+    from fpl.api.routes.live import _fetch_live_gw_with_explain
 
-    headers = {
-        "User-Agent": settings.user_agent,
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
+    rich_data = await get_live_gw(gw, _fetch_live_gw_with_explain)
+    return {
+        pid: {
+            **entry.get("stats", {}),
+            "provisional_bonus": entry.get("provisional_bonus", 0),
+        }
+        for pid, entry in rich_data.items()
     }
-    try:
-        async with httpx.AsyncClient(
-            timeout=settings.http_timeout, headers=headers
-        ) as client:
-            url = f"{settings.fpl_base_url}/event/{gw}/live/?_={int(time.time())}"
-            resp = await client.get(url)
-            resp.raise_for_status()
-            data = resp.json()
-            elements = data.get("elements", [])
-
-            # Group players by fixture (via explain[0].fixture)
-            # DGW players contribute to the first fixture only; BPS
-            # rankings for DGW are fuzzy so provisional bonus there
-            # is approximate.
-            by_fixture: dict[int, list[tuple[int, int]]] = {}
-            player_fixture: dict[int, int] = {}
-            for el in elements:
-                pid = el["id"]
-                explain = el.get("explain", [])
-                if not explain:
-                    continue
-                fixture_id = explain[0].get("fixture")
-                if fixture_id is None:
-                    continue
-                bps = el.get("stats", {}).get("bps", 0) or 0
-                by_fixture.setdefault(fixture_id, []).append((pid, bps))
-                player_fixture[pid] = fixture_id
-
-            # Compute provisional bonus per fixture
-            provisional: dict[int, int] = {}
-            for _fid, players in by_fixture.items():
-                provisional.update(_compute_provisional_bonus(players))
-
-            return {
-                el["id"]: {
-                    **el.get("stats", {}),
-                    "provisional_bonus": provisional.get(el["id"], 0),
-                }
-                for el in elements
-            }
-    except Exception:
-        return {}
 
 
-@router.get("/team")
-async def get_team(
-    user: dict[str, Any] = Depends(get_current_user),
-) -> dict[str, Any]:
-    """Current squad with form + projected points + live bonus."""
-    user_id = user["user_id"]
-    is_guest = user["role"] == "guest"
+def _load_team_db_snapshot(user_id: int) -> dict[str, Any] | None:
+    """Load team data from DB for a given user.
 
+    Returns a snapshot dict with all DB-derived data needed by get_team,
+    or None if the user has no team loaded.
+    """
     with get_session() as session:
         rows = (
             session.query(MyTeamPlayer, Player, Team)
@@ -147,10 +67,7 @@ async def get_team(
         )
 
         if not rows:
-            raise HTTPException(
-                status_code=404,
-                detail="No team data found. Set up your team first.",
-            )
+            return None
 
         current_gw = get_current_gameweek(session)
         account: MyAccount | None = (
@@ -250,18 +167,49 @@ async def get_team(
                 }
             )
 
-        import json
-
         chips: list[dict[str, Any]] = []
         if account and account.chips_json:
             with contextlib.suppress(json.JSONDecodeError):
                 chips = json.loads(account.chips_json)
-        active_chip = account.active_chip if account else None
-        gw_points_official = account.gameweek_points if account else 0
-        bank = float(account.bank) / 10 if account else 0.0
-        free_transfers = account.free_transfers if account else 1
-        overall_points = account.overall_points if account else 0
-        overall_rank = account.overall_rank if account else 0
+
+        return {
+            "current_gw": current_gw,
+            "db_players": db_players,
+            "chips": chips,
+            "active_chip": account.active_chip if account else None,
+            "gw_points_official": account.gameweek_points if account else 0,
+            "bank": float(account.bank) / 10 if account else 0.0,
+            "free_transfers": account.free_transfers if account else 1,
+            "overall_points": account.overall_points if account else 0,
+            "overall_rank": account.overall_rank if account else 0,
+        }
+
+
+@router.get("/team")
+async def get_team(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Current squad with form + projected points + live bonus."""
+    user_id = user["user_id"]
+    is_guest = user["role"] == "guest"
+
+    snapshot = await asyncio.to_thread(_load_team_db_snapshot, user_id)
+
+    if snapshot is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No team data found. Set up your team first.",
+        )
+
+    current_gw = snapshot["current_gw"]
+    db_players = snapshot["db_players"]
+    chips = snapshot["chips"]
+    active_chip = snapshot["active_chip"]
+    gw_points_official = snapshot["gw_points_official"]
+    bank = snapshot["bank"]
+    free_transfers = snapshot["free_transfers"]
+    overall_points = snapshot["overall_points"]
+    overall_rank = snapshot["overall_rank"]
 
     # Fetch live GW data (outside session — async call)
     live_data = await _fetch_live_gw(current_gw) if current_gw else {}

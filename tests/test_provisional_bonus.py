@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fpl.api.routes.team import _compute_provisional_bonus
+from fpl.api.routes.live import _compute_provisional_bonus
 
 
 def test_no_players() -> None:

@@ -495,7 +495,9 @@ async def run_fpl_ingest(session: Session) -> None:
             # Bootstrap: teams, players, gameweeks
             logger.info("Fetching FPL bootstrap-static...")
             bootstrap = await fetch_bootstrap(client, settings)
-            teams_count, players_count, gw_count = ingest_bootstrap(session, bootstrap)
+            teams_count, players_count, gw_count = await asyncio.to_thread(
+                ingest_bootstrap, session, bootstrap
+            )
             logger.info(
                 "Upserted %d teams, %d players, %d gameweeks",
                 teams_count,
@@ -507,7 +509,9 @@ async def run_fpl_ingest(session: Session) -> None:
             # Fixtures
             logger.info("Fetching FPL fixtures...")
             fixtures_data = await fetch_fixtures(client, settings)
-            fixtures_count = upsert_fixtures(session, fixtures_data)
+            fixtures_count = await asyncio.to_thread(
+                upsert_fixtures, session, fixtures_data
+            )
             logger.info("Upserted %d fixtures", fixtures_count)
             total_records += fixtures_count
 
@@ -519,7 +523,9 @@ async def run_fpl_ingest(session: Session) -> None:
 
             history_total = 0
             for pid, hist in histories.items():
-                history_total += upsert_player_histories(session, pid, hist)
+                history_total += await asyncio.to_thread(
+                    upsert_player_histories, session, pid, hist
+                )
             logger.info("Upserted %d player history records", history_total)
             total_records += history_total
 

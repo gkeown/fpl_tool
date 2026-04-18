@@ -7,13 +7,18 @@ FPL live endpoint.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter
 
 from fpl.analysis.form import get_current_gameweek
+from fpl.cache.live_gw import get_live_gw, invalidate as _invalidate_live_cache
 from fpl.cli.formatters import position_str
+from fpl.config import get_settings
 from fpl.db.engine import get_session
 from fpl.db.models import Fixture, Player, Team
 
@@ -23,12 +28,24 @@ router = APIRouter()
 _live_cache_updated_at: str = ""
 
 
-async def fetch_live_gameweek() -> dict[str, Any]:
-    """Build the live gameweek response from DB + FPL live endpoint."""
+def _load_db_snapshot() -> (
+    tuple[
+        int | None,
+        list[dict[str, Any]],
+        dict[int, dict[str, Any]],
+        dict[int, dict[str, Any]],
+    ]
+):
+    """Load gameweek, fixtures, teams, and players from DB.
+
+    Returns:
+        Tuple of (current_gw, fixture_snapshots, team_snapshots, player_snapshots).
+        current_gw is None when no current gameweek exists.
+    """
     with get_session() as session:
         current_gw = get_current_gameweek(session)
         if not current_gw:
-            return {"gameweek": None, "fixtures": []}
+            return None, [], {}, {}
 
         fixtures: list[Fixture] = (
             session.query(Fixture)
@@ -38,7 +55,6 @@ async def fetch_live_gameweek() -> dict[str, Any]:
         )
         teams = session.query(Team).all()
 
-        # Snapshot fixture data inside session
         fixture_snapshots: list[dict[str, Any]] = [
             {
                 "fpl_id": f.fpl_id,
@@ -64,8 +80,20 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             for p in players
         }
 
-    # Fetch live data (outside session — async)
-    live_raw = await _fetch_live_gw_with_explain(current_gw)
+    return current_gw, fixture_snapshots, team_snapshots, player_snapshots
+
+
+async def fetch_live_gameweek() -> dict[str, Any]:
+    """Build the live gameweek response from DB + FPL live endpoint."""
+    current_gw, fixture_snapshots, team_snapshots, player_snapshots = (
+        await asyncio.to_thread(_load_db_snapshot)
+    )
+
+    if not current_gw:
+        return {"gameweek": None, "fixtures": []}
+
+    # Fetch live data (outside session — async, shared cache)
+    live_raw = await get_live_gw(current_gw, _fetch_live_gw_with_explain)
 
     now_iso = datetime.now(UTC).isoformat()
 
@@ -312,10 +340,6 @@ async def _fetch_live_gw_with_explain(
     Provisional bonus is computed here from ALL players in each fixture
     (not filtered by our DB) so the ranking matches what FPL shows.
     """
-    import httpx
-
-    from fpl.config import get_settings
-
     settings = get_settings()
     headers = {
         "User-Agent": settings.user_agent,
@@ -326,8 +350,6 @@ async def _fetch_live_gw_with_explain(
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
         ) as client:
-            import time
-
             # Timestamp param forces a unique URL on every request,
             # bypassing CDN edge caches that ignore Cache-Control headers.
             url = f"{settings.fpl_base_url}/event/{gw}/live/?_={int(time.time())}"
@@ -368,11 +390,14 @@ async def _fetch_live_gw_with_explain(
 async def refresh_live_cache() -> None:
     """Called by the scheduler during match windows.
 
-    No longer maintains a cache — the endpoint always fetches fresh.
-    Kept so the scheduler import continues to work; updates the
-    timestamp read by the Settings page.
+    Invalidates the in-memory cache first so the next fetch always
+    goes to FPL, then warms the cache and updates the Settings timestamp.
     """
     global _live_cache_updated_at
+    # Load current GW to know which cache key to bust
+    current_gw, *_ = await asyncio.to_thread(_load_db_snapshot)
+    if current_gw:
+        _invalidate_live_cache(current_gw)
     await fetch_live_gameweek()
     _live_cache_updated_at = datetime.now(UTC).isoformat()
 

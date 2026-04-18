@@ -9,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.orm import Session
 
 import fpl.api.routes.live as live_mod
+from fpl.cache.live_gw import invalidate as invalidate_live_cache
 from fpl.db.models import Fixture, Gameweek, Player, Team
 
 
@@ -174,7 +175,7 @@ async def test_live_gameweek_returns_fixture(
     """GET /api/live/gameweek should return fixture with live stats."""
     _seed_gw(db_session)
     # Clear any existing cache
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -206,7 +207,7 @@ async def test_live_gameweek_goal_scorers(
 ) -> None:
     """Goal scorers should be listed with correct counts (Saka 2, Haaland 1)."""
     _seed_gw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -236,7 +237,7 @@ async def test_live_gameweek_assisters(
 ) -> None:
     """Assisters should include Gabriel (1 assist)."""
     _seed_gw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -263,7 +264,7 @@ async def test_live_gameweek_top_bps(
 ) -> None:
     """Top BPS should be sorted descending: Saka (60), Haaland (45), Gabriel (35)."""
     _seed_gw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -295,7 +296,7 @@ async def test_live_gameweek_top_defcon(
 ) -> None:
     """Top DEFCON should be Gabriel (14), Dias (10), Saka (5)."""
     _seed_gw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -349,7 +350,7 @@ async def test_live_gameweek_defcon_thresholds(
 ) -> None:
     """Only players meeting position-based DEFCON threshold qualify."""
     _seed_gw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
@@ -483,7 +484,7 @@ async def test_live_gameweek_dgw_attribution(
 ) -> None:
     """DGW players' stats must be attributed to the correct fixture."""
     _seed_dgw(db_session)
-    live_mod._live_cache = {}
+    invalidate_live_cache(32)
 
     with patch("fpl.api.app.init_db"), \
          patch(
