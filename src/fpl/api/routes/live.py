@@ -112,19 +112,11 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 per_fix_stats[ident] = s.get("value", 0) or 0
                 per_fix_points += s.get("points", 0) or 0
 
-            # BPS and provisional bonus are not in the explain breakdown
-            # during live matches — they only appear in top-level stats.
-            # Explain bonus is 0 until the match is finalised by FPL.
+            # BPS is not in the explain breakdown — pull from top-level stats.
+            # Bonus is computed from BPS rankings after all players are
+            # collected (see _compute_provisional_bonus below).
             is_single_fixture = len(explain) == 1
             bps = top_stats.get("bps", 0) or 0 if is_single_fixture else 0
-            # Provisional bonus lives in top_stats during live games;
-            # finalized bonus appears in explain after FPL confirms it.
-            # Prefer top_stats (covers both states), fall back to explain.
-            bonus = (
-                top_stats.get("bonus", 0) or per_fix_stats.get("bonus", 0)
-                if is_single_fixture
-                else per_fix_stats.get("bonus", 0)
-            )
 
             p = player_snapshots.get(pid)
             if p:
@@ -133,7 +125,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         p,
                         {
                             "bps": bps,
-                            "bonus": bonus,
+                            "bonus": 0,  # overwritten below from BPS rankings
                             "goals_scored": per_fix_stats.get("goals_scored", 0),
                             "assists": per_fix_stats.get("assists", 0),
                             "defensive_contribution": per_fix_stats.get(
@@ -145,6 +137,29 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         },
                     )
                 )
+
+        # Compute provisional bonus from live BPS rankings within this fixture.
+        # FPL awards 3/2/1 to the top 3 BPS ranks (ties share the same award;
+        # standard ranking — a tie for 1st means the next rank is 3rd, not 2nd).
+        _bps_order = sorted(
+            range(len(fixture_players)),
+            key=lambda i: fixture_players[i][1].get("bps", 0) or 0,
+            reverse=True,
+        )
+        rank = 1
+        for _list_pos, _fp_idx in enumerate(_bps_order):
+            _bps = fixture_players[_fp_idx][1].get("bps", 0) or 0
+            if _bps <= 0:
+                break
+            if _list_pos > 0:
+                _prev_bps = (
+                    fixture_players[_bps_order[_list_pos - 1]][1].get("bps", 0) or 0
+                )
+                if _bps < _prev_bps:
+                    rank = _list_pos + 1
+            if rank > 3:
+                break
+            fixture_players[_fp_idx][1]["bonus"] = 4 - rank
 
         # Goal scorers
         goal_scorers: list[dict[str, Any]] = []
@@ -281,7 +296,11 @@ async def _fetch_live_gw_with_explain(
     from fpl.config import get_settings
 
     settings = get_settings()
-    headers = {"User-Agent": settings.user_agent}
+    headers = {
+        "User-Agent": settings.user_agent,
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+    }
     try:
         async with httpx.AsyncClient(
             timeout=settings.http_timeout, headers=headers
