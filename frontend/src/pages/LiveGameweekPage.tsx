@@ -7,14 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { RotateCw, Circle, Trophy, Shield, Zap } from "lucide-react";
+import { RotateCw, Circle, Trophy, Shield, Zap, HandMetal } from "lucide-react";
 
-function StatusBadge({ status, kickoff }: { status: string; kickoff: string | null }) {
+function StatusBadge({ status, kickoff, matchMinute }: { status: string; kickoff: string | null; matchMinute?: number }) {
   if (status === "in") {
     return (
       <Badge className="bg-fpl-green/15 text-fpl-green border border-fpl-green/30 text-xs animate-pulse-glow">
         <Circle className="h-2 w-2 mr-1 fill-fpl-green" />
-        LIVE
+        LIVE{matchMinute && matchMinute > 0 ? ` · ${matchMinute}'` : ""}
       </Badge>
     );
   }
@@ -48,7 +48,7 @@ function FixtureCard({ fixture }: { fixture: any }) {
       <CardContent className="p-4">
         {/* Status */}
         <div className="flex items-center justify-between mb-3">
-          <StatusBadge status={fixture.status} kickoff={fixture.kickoff_time} />
+          <StatusBadge status={fixture.status} kickoff={fixture.kickoff_time} matchMinute={fixture.match_minute} />
         </div>
 
         {/* Score line */}
@@ -102,6 +102,25 @@ function FixtureCard({ fixture }: { fixture: any }) {
                   <div key={i} className="text-muted-foreground">{a.player}</div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* GK Saves */}
+        {fixture.gk_saves && fixture.gk_saves.length > 0 && (
+          <div className="mt-2">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <HandMetal className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Saves</span>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {fixture.gk_saves.map((s: any, i: number) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="font-medium">{s.player}</span>
+                  <span className="text-[10px] text-muted-foreground">{s.team}</span>
+                  <span className="tabular-nums font-semibold">{s.saves}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}

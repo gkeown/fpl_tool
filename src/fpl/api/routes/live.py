@@ -53,8 +53,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             for f in fixtures
         ]
         team_snapshots: dict[int, dict[str, Any]] = {
-            t.fpl_id: {"name": t.name, "short_name": t.short_name}
-            for t in teams
+            t.fpl_id: {"name": t.name, "short_name": t.short_name} for t in teams
         }
         players = session.query(Player).all()
         player_snapshots: dict[int, dict[str, Any]] = {
@@ -99,11 +98,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
 
             # Find the explain entry for this specific fixture
             fix_explain = next(
-                (
-                    e
-                    for e in explain
-                    if e.get("fixture") == fs["fpl_id"]
-                ),
+                (e for e in explain if e.get("fixture") == fs["fpl_id"]),
                 None,
             )
             if fix_explain is None:
@@ -120,11 +115,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
             # BPS isn't in explain — pull from top-level stats
             # (accurate for single-fixture GW; DGW approximation)
             is_single_fixture = len(explain) == 1
-            bps = (
-                top_stats.get("bps", 0) or 0
-                if is_single_fixture
-                else 0
-            )
+            bps = top_stats.get("bps", 0) or 0 if is_single_fixture else 0
 
             p = player_snapshots.get(pid)
             if p:
@@ -134,13 +125,13 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                         {
                             "bps": bps,
                             "bonus": per_fix_stats.get("bonus", 0),
-                            "goals_scored": per_fix_stats.get(
-                                "goals_scored", 0
-                            ),
+                            "goals_scored": per_fix_stats.get("goals_scored", 0),
                             "assists": per_fix_stats.get("assists", 0),
                             "defensive_contribution": per_fix_stats.get(
                                 "defensive_contribution", 0
                             ),
+                            "minutes": per_fix_stats.get("minutes", 0),
+                            "saves": per_fix_stats.get("saves", 0),
                             "total_points": per_fix_points,
                         },
                     )
@@ -192,9 +183,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
 
         # Top DEFCON — only players who meet the scoring threshold:
         # DEF/GK need >= 10 CBIT, MID/FWD need >= 12
-        def _meets_defcon(
-            element_type: int, defcon_value: int
-        ) -> bool:
+        def _meets_defcon(element_type: int, defcon_value: int) -> bool:
             threshold = 10 if element_type <= 2 else 12
             return defcon_value >= threshold
 
@@ -222,11 +211,38 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 }
             )
 
+        # GK saves — element_type 1 = GKP
+        gk_saves: list[dict[str, Any]] = []
+        for p, stats in fixture_players:
+            if p["element_type"] != 1:
+                continue
+            saves = stats.get("saves", 0) or 0
+            if saves <= 0:
+                continue
+            team_info = team_snapshots.get(p["team_id"], {})
+            gk_saves.append(
+                {
+                    "player": p["web_name"],
+                    "team": team_info.get("short_name", "?"),
+                    "saves": saves,
+                }
+            )
+
+        match_minute = (
+            max(
+                (s.get("minutes", 0) or 0 for _, s in fixture_players),
+                default=0,
+            )
+            if status == "in"
+            else 0
+        )
+
         fixtures_out.append(
             {
                 "fixture_id": fs["fpl_id"],
                 "kickoff_time": fs["kickoff_time"],
                 "status": status,
+                "match_minute": match_minute,
                 "home_team": home["name"],
                 "home_team_short": home["short_name"],
                 "home_score": fs["team_h_score"],
@@ -235,6 +251,7 @@ async def fetch_live_gameweek() -> dict[str, Any]:
                 "away_score": fs["team_a_score"],
                 "goal_scorers": goal_scorers,
                 "assisters": assisters,
+                "gk_saves": gk_saves,
                 "top_bps": top_bps,
                 "top_defcon": top_defcon,
             }
@@ -328,11 +345,7 @@ async def get_live_gameweek(force: bool = False) -> dict[str, Any]:
     with get_session() as session:
         current_gw = get_current_gameweek(session)
 
-    use_cache = (
-        not force
-        and _cache_is_fresh()
-        and _cache_gw_matches(current_gw)
-    )
+    use_cache = not force and _cache_is_fresh() and _cache_gw_matches(current_gw)
     if use_cache:
         return {**_live_cache, "cached_at": _live_cache_updated_at}
 
